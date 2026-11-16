@@ -70,6 +70,11 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 .dbtn { pointer-events: auto; font-family: var(--ui); font-weight: 700; font-size: 13px; letter-spacing: 0.14em; padding: 6px 14px; background: transparent; color: var(--dim); border: 1px solid rgba(255, 122, 26, 0.45); cursor: pointer; }
 .dbtn[aria-pressed="true"] { background: rgba(255, 122, 26, 0.18); color: var(--ash); border-color: var(--ember); }
 .dbtn:focus-visible { outline: 2px solid var(--ash); outline-offset: 2px; }
+.panel h1.mid { font-size: clamp(48px, 11vw, 96px); }
+.err { margin: 0; padding: 8px 12px; border: 1px solid #ff4a3a; color: #ffb3aa; font-size: 14px; }
+.go:disabled { opacity: 0.4; cursor: not-allowed; }
+#pauseBtn { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); width: 40px; height: 40px; font-family: var(--ui); font-weight: 700; font-size: 14px; color: var(--ash); background: var(--soot); border: 1px solid rgba(255, 122, 26, 0.5); cursor: pointer; }
+#pauseBtn:focus-visible { outline: 2px solid var(--ash); outline-offset: 2px; }
 .toggles { font-size: 12px; letter-spacing: 0.12em; color: var(--dim); }
 .toggles b { color: var(--ash); }
 #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
@@ -96,13 +101,21 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
   <div id="feed"></div>
   <div id="banner"></div>
   <div id="chargewrap"><div id="charge"></div></div>
-  <div id="keys">WASD / arrows move · Space pass or tackle · hold J throw · Shift switch · G gore · M sound</div>
+  <div id="keys">WASD / arrows move · Space pass or tackle · hold J throw · Shift switch · P pause · G gore · M sound</div>
 </div>
 <div id="touch">
   <div id="stickzone"><div id="stick"><div id="nub"></div></div></div>
   <button id="btnA" class="tbtn" type="button">PASS<br>TACKLE</button>
   <button id="btnB" class="tbtn" type="button">THROW</button>
   <button id="btnC" class="tbtn small" type="button">SWITCH</button>
+</div>
+<button id="pauseBtn" type="button" aria-label="Pause" hidden>II</button>
+<div id="pause" class="overlay" hidden>
+  <div class="panel">
+    <h1 class="mid">PAUSED</h1>
+    <button id="resumeBtn" class="go" type="button">RESUME</button>
+    <div class="toggles">Press <b>P</b> or <b>Esc</b> to resume</div>
+  </div>
 </div>
 <div id="menu" class="overlay">
   <div class="panel">
@@ -114,9 +127,10 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
       <dt><kbd>Space</kbd></dt><dd>With the ball: pass. Without: dive tackle.</dd>
       <dt><kbd>Shift</kbd> or <kbd>L</kbd></dt><dd>Switch to the teammate nearest the ball.</dd>
       <dt><kbd>J</kbd> hold</dt><dd>Charge a throw, release to fire. Aim roughly at the goal and it locks on.</dd>
-      <dt><kbd>G</kbd> <kbd>M</kbd></dt><dd>Gore on or off. Sound on or off.</dd>
+      <dt><kbd>P</kbd> <kbd>G</kbd> <kbd>M</kbd></dt><dd>Pause. Gore on or off. Sound on or off.</dd>
     </dl>
     <p class="rules">Goal 10 pts · Kill 10 pts · Two 90-second halves · No fouls</p>
+    <p id="loadError" class="err" hidden>The 3D engine file (vendor/three.min.js) did not load. Keep the vendor folder next to index.html and reload.</p>
     <button id="startBtn" class="go" type="button">START MATCH</button>
     <div class="diff" role="group" aria-label="Difficulty">
       <button type="button" class="dbtn" data-diff="easy">EASY</button>
@@ -127,11 +141,17 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
   </div>
 </div>
 
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
-</script>
-<script type="module">
-import * as THREE from 'three';
+<!-- Three.js r160 is bundled in vendor/ so the game runs offline and by opening this file directly. -->
+<script src="vendor/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+const THREE = window.THREE;
+if (!THREE) {
+  const m = document.getElementById('loadError'); m.hidden = false;
+  document.getElementById('startBtn').disabled = true;
+  return;
+}
 
 // ===================================================================
 // Constants
@@ -162,7 +182,7 @@ const DIFFS = {
 let diffKey = 'easy';
 try { const v = localStorage.getItem('ironball.diff'); if (v && DIFFS[v]) diffKey = v; } catch (e) { /* storage unavailable */ }
 let DIFF = DIFFS[diffKey];
-const game = { state: 'menu', stateT: 0, half: 1, time: MATCH_HALF, score: [0, 0], gore: true, shake: 0, hitstop: 0 };
+const game = { paused: false, state: 'menu', stateT: 0, half: 1, time: MATCH_HALF, score: [0, 0], gore: true, shake: 0, hitstop: 0 };
 
 // ===================================================================
 // Renderer, scene, camera
@@ -292,7 +312,7 @@ for (const s of [1, -1]) {
 const audio = {
   ctx: null, master: null, noise: null, crowd: null, muted: false,
   init() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    if (this.ctx) { if (this.ctx.state === 'suspended' && !game.paused) this.ctx.resume(); return; }
     try {
       const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C();
       this.master = this.ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.55; this.master.connect(this.ctx.destination);
@@ -1095,7 +1115,7 @@ function startMatch() {
   clearDecals(); clearGibs();
   for (let i = 0; i < MAXP; i++) { bp.life[i] = 0; bp.pos[i * 3 + 1] = -50; }
   for (const p of players) p.reset(true);
-  hud.menu.hidden = true;
+  hud.menu.hidden = true; $('pauseBtn').hidden = false;
   setupKickoff();
 }
 function scoreGoal(team) {
@@ -1252,6 +1272,7 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (game.paused) { render(0); return; }
   let sim = dt;
   if (game.hitstop > 0) { game.hitstop -= dt; sim = dt * 0.12; }
   game.shake = Math.max(0, game.shake - dt * 2.2);
@@ -1272,11 +1293,25 @@ function setDiff(k) {
 }
 document.querySelectorAll('.dbtn').forEach(b => b.addEventListener('click', () => setDiff(b.dataset.diff)));
 setDiff(diffKey);
+const PAUSABLE = ['kickoff', 'play', 'goal', 'half'];
+function setPaused(on) {
+  on = !!on && PAUSABLE.includes(game.state);
+  if (on === game.paused) return;
+  game.paused = on;
+  $('pause').hidden = !on;
+  keys.clear(); input.throwHeld = false; input.pressA = false; input.swap = false; input.tx = input.tz = 0;
+  if (audio.ctx) { if (on) audio.ctx.suspend(); else audio.ctx.resume(); }
+}
+$('pauseBtn').addEventListener('click', () => setPaused(true));
+$('resumeBtn').addEventListener('click', () => setPaused(false));
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 function toggleGore() { game.gore = !game.gore; $('goreState').textContent = game.gore ? 'ON' : 'OFF'; feed(game.gore ? 'GORE ON' : 'GORE OFF'); }
 const THROW_KEYS = ['KeyJ', 'KeyK'];
 window.addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
+  if (e.code === 'KeyP' || e.code === 'Escape') { setPaused(!game.paused); return; }
+  if (game.paused) return;
   keys.add(e.code); audio.init();
   if (e.code === 'Space') input.pressA = true;
   if (THROW_KEYS.includes(e.code)) input.throwHeld = true;
@@ -1290,7 +1325,7 @@ window.addEventListener('keyup', e => {
   keys.delete(e.code);
   if (THROW_KEYS.includes(e.code) && !THROW_KEYS.some(k => keys.has(k))) { input.throwHeld = false; input.throwReleased = true; }
 });
-window.addEventListener('blur', () => { keys.clear(); input.throwHeld = false; });
+window.addEventListener('blur', () => { keys.clear(); input.throwHeld = false; setPaused(true); });
 $('startBtn').addEventListener('click', () => startMatch());
 renderer.domElement.addEventListener('pointerdown', () => { if (game.state === 'full') startMatch(); });
 
@@ -1317,7 +1352,8 @@ renderer.domElement.addEventListener('pointerdown', () => { if (game.state === '
 }
 
 // expose a tiny hook for automated tests
-window.__ironball = { game, players, ball, human, startMatch, step };
+window.__ironball = { game, players, ball, human, startMatch, step, setPaused };
+})();
 </script>
 </body>
 </html>
