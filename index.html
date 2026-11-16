@@ -403,11 +403,12 @@ const gibs = [];
 const meatMat = new THREE.MeshStandardMaterial({ color: 0x6a0a08, roughness: 0.35, metalness: 0.1 });
 const boneMat = new THREE.MeshStandardMaterial({ color: 0xd8cbb0, roughness: 0.6 });
 const chunkGeo = new THREE.BoxGeometry(0.16, 0.12, 0.14);
+function freeGib(g) { scene.remove(g.obj); g.obj.traverse(o => { if (o.isMesh && o.material.userData.owned) o.material.dispose(); }); }
 function spawnGib(obj, vel, ang, bleed = 2, r = 0.12) {
   obj.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
   scene.add(obj);
   gibs.push({ obj, vel, ang, bleed, r });
-  while (gibs.length > 110) { const g = gibs.shift(); scene.remove(g.obj); }
+  while (gibs.length > 110) freeGib(gibs.shift());
 }
 function spawnChunks(x, y, z, n, dir, power) {
   if (!game.gore) return;
@@ -441,7 +442,7 @@ function stepGibs(dt) {
     }
   }
 }
-function clearGibs() { for (const g of gibs) scene.remove(g.obj); gibs.length = 0; }
+function clearGibs() { for (const g of gibs) freeGib(g); gibs.length = 0; }
 
 // ===================================================================
 // Players
@@ -677,7 +678,7 @@ function severPart(v, key, dx, dz, power) {
   pivot.getWorldQuaternion(tmpQ);
   const holder = new THREE.Group(); holder.position.copy(wp); holder.quaternion.copy(tmpQ);
   const clone = pivot.clone(true); clone.position.copy(c).negate(); clone.rotation.set(0, 0, 0); clone.visible = true;
-  clone.traverse(o => { if (o.isMesh && o.material === v.m.armor) o.material = v.m.armor.clone(); });
+  clone.traverse(o => { if (o.isMesh && o.material === v.m.armor) { o.material = v.m.armor.clone(); o.material.userData.owned = true; } });
   holder.add(clone);
   pivot.visible = false;
   if (key in v.limbs) { v.limbs[key] = 0; v.m.stumps[key].visible = true; v.bleedT = Math.max(v.bleedT, 5); v.bleedKey = key; }
@@ -721,6 +722,7 @@ function kill(v, dx, dz, dmg, byTeam) {
   if (dmg > 38 || r < 0.25) {
     for (const k of ['head', 'armL', 'armR', 'legL', 'legR', 'torso']) severPart(v, k, dx, dz, 10);
     v.exploded = true;
+    for (const k in v.m.stumps) v.m.stumps[k].visible = false;
     spawnChunks(v.pos.x, 1.1, v.pos.z, 12, tmpV.set(dx, 0, dz), 9);
     feed(`${v.name} IS PASTE · +10 ${TEAMS[scorer].short}`, 'blood');
   } else if (r < 0.65) {
@@ -805,6 +807,7 @@ function humanStep(p, dt) {
   steer(p, w.x, w.z, 1, dt);
   if (ball.owner === p) {
     if (input.throwHeld) p.charge = Math.min(1, p.charge + dt / 0.7);
+    else if (!input.throwReleased) p.charge = 0;
     if (input.throwReleased && p.charge > 0) humanThrow(p);
     else if (input.pressA) humanPass(p);
   } else {
@@ -967,7 +970,7 @@ function stepPlayer(p, dt) {
   switch (p.state) {
     case 'run': {
       const sp = Math.hypot(p.vel.x, p.vel.z);
-      if (sp > 0.6 && p.charge === 0) {
+      if (sp > 0.6) {
         const want = Math.atan2(p.vel.x, p.vel.z);
         let d = want - p.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
         p.yaw += clamp(d, -12 * dt, 12 * dt);
@@ -1142,7 +1145,7 @@ function step(dt) {
   stepBall(dt);
   if (active) ballContacts();
   stepBlood(dt); stepGibs(dt);
-  input.pressA = false; input.throwReleased = false;
+  input.pressA = false; input.throwReleased = false; input.swap = false;
 }
 
 // ===================================================================

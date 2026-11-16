@@ -15,6 +15,8 @@ You can also serve the folder, for example `npx serve .` or `python3 -m http.ser
 | WASD or arrow keys | Run (you control the red player with the yellow ring) |
 | Space | With the ball: pass. Without: dive tackle |
 | Hold J (or K) | Charge a throw, release to fire. Aim roughly at the goal and the throw locks on |
+| Shift or L | Switch to the teammate nearest the ball |
+| 1 / 2 / 3 | Difficulty on the start screen: Easy, Normal, Hard |
 | G | Gore on or off |
 | M | Sound on or off |
 | Enter | Start match / rematch |
