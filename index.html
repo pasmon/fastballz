@@ -74,6 +74,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 #nub { position: absolute; width: 52px; height: 52px; left: 34px; top: 34px; border-radius: 50%; background: rgba(255, 122, 26, 0.6); }
 .tbtn { position: absolute; pointer-events: auto; touch-action: none; width: 84px; height: 84px; border-radius: 50%; border: 2px solid var(--ember); background: rgba(20, 14, 10, 0.7); color: var(--ash); font-family: var(--ui); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
 #btnA { right: calc(env(safe-area-inset-right, 0px) + 120px); bottom: calc(env(safe-area-inset-bottom, 0px) + 30px); }
+#btnC { right: calc(env(safe-area-inset-right, 0px) + 40px); bottom: calc(env(safe-area-inset-bottom, 0px) + 190px); width: 60px; height: 60px; font-size: 10px; }
 #btnB { right: calc(env(safe-area-inset-right, 0px) + 24px); bottom: calc(env(safe-area-inset-bottom, 0px) + 90px); }
 .tbtn.on { background: rgba(255, 122, 26, 0.6); }
 @media (prefers-reduced-motion: reduce) { .msg { animation-duration: 2.4s; } }
@@ -90,12 +91,13 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
   <div id="feed"></div>
   <div id="banner"></div>
   <div id="chargewrap"><div id="charge"></div></div>
-  <div id="keys">WASD / arrows move · Space pass or tackle · hold J throw · G gore · M sound</div>
+  <div id="keys">WASD / arrows move · Space pass or tackle · hold J throw · Shift switch · G gore · M sound</div>
 </div>
 <div id="touch">
   <div id="stickzone"><div id="stick"><div id="nub"></div></div></div>
   <button id="btnA" class="tbtn" type="button">PASS<br>TACKLE</button>
   <button id="btnB" class="tbtn" type="button">THROW</button>
+  <button id="btnC" class="tbtn small" type="button">SWITCH</button>
 </div>
 <div id="menu" class="overlay">
   <div class="panel">
@@ -103,8 +105,9 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
     <p class="sub">Vulcan League · Season 2189 · Smelting Pit 7</p>
     <p class="fixture"><span class="h">CRIMSON HOUNDS</span> vs <span class="a">COBALT WARDENS</span></p>
     <dl class="controls">
-      <dt><kbd>WASD</kbd> <kbd>↑↓←→</kbd></dt><dd>Run. You control the red player with the yellow ring.</dd>
+      <dt><kbd>WASD</kbd> <kbd>↑↓←→</kbd></dt><dd>Run. You control the red player with the yellow arrow and ring.</dd>
       <dt><kbd>Space</kbd></dt><dd>With the ball: pass. Without: dive tackle.</dd>
+      <dt><kbd>Shift</kbd> or <kbd>L</kbd></dt><dd>Switch to the teammate nearest the ball.</dd>
       <dt><kbd>J</kbd> hold</dt><dd>Charge a throw, release to fire. Aim roughly at the goal and it locks on.</dd>
       <dt><kbd>G</kbd> <kbd>M</kbd></dt><dd>Gore on or off. Sound on or off.</dd>
     </dl>
@@ -550,6 +553,8 @@ const ball = {
 ball.mesh.castShadow = true; scene.add(ball.mesh);
 const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.72, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false }));
 ring.position.y = 0.03; scene.add(ring);
+const marker = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.45, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23a }));
+scene.add(marker);
 
 // ===================================================================
 // HUD
@@ -593,7 +598,7 @@ function passBall(p, m) {
   const d = Math.hypot(ax - p.pos.x, az - p.pos.z);
   const speed = clamp(d / clamp(d / 17, 0.22, 1.3), 8, 22) * (0.85 + 0.15 * p.armPower());
   aimAt(p, ax, 1.1, az, speed, 0.02);
-  if (m.team === 0 && !m.keeper) { human.p = m; human.switchT = 1.0; }
+  if (m.team === 0 && !m.keeper && !human.auto) { human.p = m; human.switchT = 2.0; human.flash = 0.6; }
 }
 function bestMate(p, forPass = true) {
   const dir = -p.side; let best = null, bs = -1e9;
@@ -609,7 +614,7 @@ function bestMate(p, forPass = true) {
 }
 function take(p) {
   ball.owner = p; ball.vel.set(0, 0, 0); ball.ignore.clear(); p.ai.hold = 0;
-  if (p.team === 0 && !p.keeper) human.p = p;
+  if (p.team === 0 && !p.keeper && human.p !== p) { human.p = p; human.switchT = 1.5; }
   audio.thunk();
 }
 function dropBall(p, dx = 0, dz = 0) {
@@ -730,8 +735,8 @@ function wallSlam(p, speed, nx, nz) {
 // Human control
 // ===================================================================
 const keys = new Set();
-const input = { pressA: false, throwHeld: false, throwReleased: false, tx: 0, tz: 0 };
-const human = { p: null, switchT: 0, auto: false }; // auto: let the AI drive your team (used by tests / attract mode)
+const input = { pressA: false, throwHeld: false, throwReleased: false, swap: false, tx: 0, tz: 0 };
+const human = { p: null, switchT: 0, auto: false, flash: 0 }; // auto: let the AI drive your team (used by tests / attract mode)
 
 function humanWish() {
   let x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -783,19 +788,26 @@ function humanStep(p, dt) {
   }
 }
 function updateControl(dt) {
+  // Sticky control: you keep your player unless your team catches the ball, you pass,
+  // your player dies, someone else is far better placed, or you press the switch key.
   human.switchT -= dt;
-  if (ball.owner && ball.owner.team === 0 && !ball.owner.keeper) { human.p = ball.owner; return; }
-  const cur = human.p;
-  if (cur && cur.state !== 'dead' && human.switchT > 0) return;
+  const swap = input.swap; input.swap = false;
+  if (ball.owner && ball.owner.team === 0 && !ball.owner.keeper) {
+    if (human.p !== ball.owner) { human.p = ball.owner; human.switchT = 1.5; }
+    return;
+  }
+  const cur = human.p, curOk = cur && cur.state !== 'dead';
+  if (curOk && !swap && human.switchT > 0) return;
   const target = ball.owner ? ball.owner.pos : landing;
   let best = null, bd = 1e9;
   for (const p of players) {
-    if (p.team !== 0 || p.keeper || p.state === 'dead') continue;
+    if (p.team !== 0 || p.keeper || p.state === 'dead' || (swap && p === cur)) continue;
     const d = p.pos.distanceTo(target) + (p.up ? 0 : 8);
     if (d < bd) { bd = d; best = p; }
   }
-  const curD = cur && cur.state !== 'dead' ? cur.pos.distanceTo(target) + (cur.up ? 0 : 8) : 1e9;
-  if (best && (bd < curD - 2.5 || !cur || cur.state === 'dead')) { human.p = best; human.switchT = 0.35; }
+  if (!best) return;
+  const curD = curOk ? cur.pos.distanceTo(target) + (cur.up ? 0 : 8) : 1e9;
+  if (swap || !curOk || bd < curD - 9) { human.p = best; human.switchT = 2.0; human.flash = 0.6; }
 }
 
 // ===================================================================
@@ -1113,15 +1125,18 @@ function updateCamera(dt) {
     const t = performance.now() * 0.00007;
     camera.position.set(Math.sin(t) * 42, 24, Math.cos(t) * 50); camera.lookAt(0, 0, 0); return;
   }
-  const f = ball.owner ? ball.owner.pos : ball.pos;
-  const k = 1 - Math.exp(-3.5 * dt);
-  camFocus.x += (f.x * 0.5 - camFocus.x) * k;
-  camFocus.z += (clamp(f.z, -24, 19) - camFocus.z) * k;
+  // Close follow cam: frames the ball, pulled toward your player so both stay on screen.
+  const f = ball.owner ? ball.owner.pos : ball.pos, hp = human.p;
+  let fx = f.x, fz = f.z;
+  if (hp && hp.state !== 'dead' && ball.owner !== hp) { fx = f.x * 0.6 + hp.pos.x * 0.4; fz = f.z * 0.6 + hp.pos.z * 0.4; }
+  const k = 1 - Math.exp(-4 * dt);
+  camFocus.x += (clamp(fx, -11, 11) - camFocus.x) * k;
+  camFocus.z += (clamp(fz, -27, 25) - camFocus.z) * k;
   const portrait = camera.aspect < 1;
-  const h = portrait ? 46 : 24, back = portrait ? 22 : 15;
-  const sh = game.shake * 0.35;
+  const h = portrait ? 21 : 13.5, back = portrait ? 12 : 10;
+  const sh = game.shake * 0.3;
   camera.position.set(camFocus.x + rand(-sh, sh), h + rand(-sh, sh), camFocus.z + back);
-  camera.lookAt(camFocus.x, 0, camFocus.z - 2.5);
+  camera.lookAt(camFocus.x, 0, camFocus.z - 1.5);
 }
 function animatePlayer(p, dt) {
   const m = p.m;
@@ -1162,7 +1177,16 @@ function render(dt) {
   ball.mesh.rotation.x += ball.vel.z * dt * 3; ball.mesh.rotation.z -= ball.vel.x * dt * 3;
   const hp = human.p;
   ring.visible = !!hp && hp.state !== 'dead' && game.state === 'play';
-  if (hp) { ring.position.x = hp.pos.x; ring.position.z = hp.pos.z; ring.scale.setScalar(1 + Math.sin(performance.now() * 0.01) * 0.06); }
+  marker.visible = ring.visible;
+  human.flash = Math.max(0, human.flash - dt);
+  if (hp) {
+    const now = performance.now();
+    ring.position.x = hp.pos.x; ring.position.z = hp.pos.z;
+    ring.scale.setScalar(1 + Math.sin(now * 0.01) * 0.06 + human.flash * 1.5);
+    marker.position.set(hp.pos.x, 2.85 - hp.sink + Math.sin(now * 0.008) * 0.12, hp.pos.z);
+    marker.rotation.y += dt * 3;
+    marker.scale.setScalar(1 + human.flash);
+  }
   launcher.material.emissiveIntensity += (0.4 - launcher.material.emissiveIntensity) * Math.min(1, dt * 2);
   bpAttr.needsUpdate = true;
   if (decalsDirty) { decals.instanceMatrix.needsUpdate = true; if (decals.instanceColor) decals.instanceColor.needsUpdate = true; decalsDirty = false; }
@@ -1206,6 +1230,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Enter' && (game.state === 'menu' || game.state === 'full')) startMatch();
   if (e.code === 'KeyG') toggleGore();
   if (e.code === 'KeyM') audio.toggle();
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyL') input.swap = true;
 });
 window.addEventListener('keyup', e => {
   keys.delete(e.code);
@@ -1229,6 +1254,7 @@ renderer.domElement.addEventListener('pointerdown', () => { if (game.state === '
   const end = e => { if (e.pointerId !== id) return; id = null; input.tx = input.tz = 0; nub.style.transform = ''; };
   zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
   const a = $('btnA'), b = $('btnB');
+  $('btnC').addEventListener('pointerdown', e => { e.preventDefault(); input.swap = true; });
   a.addEventListener('pointerdown', e => { e.preventDefault(); audio.init(); input.pressA = true; a.classList.add('on'); });
   a.addEventListener('pointerup', () => a.classList.remove('on'));
   b.addEventListener('pointerdown', e => { e.preventDefault(); audio.init(); input.throwHeld = true; b.classList.add('on'); b.setPointerCapture(e.pointerId); });
