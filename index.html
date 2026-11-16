@@ -65,6 +65,11 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 .go { justify-self: center; pointer-events: auto; font-family: var(--display); font-size: 26px; letter-spacing: 0.06em; color: #120b06; background: var(--ember); border: 0; padding: 10px 34px; cursor: pointer; clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%); }
 .go:hover { background: #ffa04a; }
 .go:focus-visible { outline: 3px solid var(--ash); outline-offset: 4px; }
+
+.diff { display: flex; justify-content: center; gap: 8px; }
+.dbtn { pointer-events: auto; font-family: var(--ui); font-weight: 700; font-size: 13px; letter-spacing: 0.14em; padding: 6px 14px; background: transparent; color: var(--dim); border: 1px solid rgba(255, 122, 26, 0.45); cursor: pointer; }
+.dbtn[aria-pressed="true"] { background: rgba(255, 122, 26, 0.18); color: var(--ash); border-color: var(--ember); }
+.dbtn:focus-visible { outline: 2px solid var(--ash); outline-offset: 2px; }
 .toggles { font-size: 12px; letter-spacing: 0.12em; color: var(--dim); }
 .toggles b { color: var(--ash); }
 #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
@@ -113,7 +118,12 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
     </dl>
     <p class="rules">Goal 10 pts · Kill 10 pts · Two 90-second halves · No fouls</p>
     <button id="startBtn" class="go" type="button">START MATCH</button>
-    <div class="toggles">Press <b>Enter</b> to start · Gore <b id="goreState">ON</b></div>
+    <div class="diff" role="group" aria-label="Difficulty">
+      <button type="button" class="dbtn" data-diff="easy">EASY</button>
+      <button type="button" class="dbtn" data-diff="normal">NORMAL</button>
+      <button type="button" class="dbtn" data-diff="hard">HARD</button>
+    </div>
+    <div class="toggles">Press <b>Enter</b> to start · <b>1 2 3</b> difficulty · Gore <b id="goreState">ON</b></div>
   </div>
 </div>
 
@@ -143,6 +153,15 @@ const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
 
+// Difficulty only changes the opposing (blue) team.
+const DIFFS = {
+  easy:   { label: 'EASY',   speed: 0.85, dive: 0.12, diveRange: 2.0, react: [0.4, 0.65], pressers: 1, shotNoise: 0.14, shotRange: 14, shotSpeed: 0.8, keeper: -0.3, intercept: 8, passError: 0.12 },
+  normal: { label: 'NORMAL', speed: 0.93, dive: 0.26, diveRange: 2.4, react: [0.25, 0.4], pressers: 2, shotNoise: 0.08, shotRange: 17, shotSpeed: 0.9, keeper: -0.12, intercept: 12, passError: 0.06 },
+  hard:   { label: 'HARD',   speed: 1.0,  dive: 0.45, diveRange: 2.7, react: [0.15, 0.25], pressers: 2, shotNoise: 0.05, shotRange: 19, shotSpeed: 1.0, keeper: 0, intercept: 16, passError: 0.02 },
+};
+let diffKey = 'easy';
+try { const v = localStorage.getItem('ironball.diff'); if (v && DIFFS[v]) diffKey = v; } catch (e) { /* storage unavailable */ }
+let DIFF = DIFFS[diffKey];
 const game = { state: 'menu', stateT: 0, half: 1, time: MATCH_HALF, score: [0, 0], gore: true, shake: 0, hitstop: 0 };
 
 // ===================================================================
@@ -508,6 +527,7 @@ class Player {
   get up() { return this.state === 'run'; }
   maxSpeed() {
     let s = this.keeper ? 7.0 : 7.6;
+    if (this.team === 1) s *= DIFF.speed;
     if (ball.owner === this) s *= 0.93;
     s *= (this.limbs.legL ? 1 : 0.5) * (this.limbs.legR ? 1 : 0.5);
     return s;
@@ -604,7 +624,7 @@ function passBall(p, m) {
   const ax = m.pos.x + m.vel.x * t0 * 0.85, az = m.pos.z + m.vel.z * t0 * 0.85;
   const d = Math.hypot(ax - p.pos.x, az - p.pos.z);
   const speed = clamp(d / clamp(d / 17, 0.22, 1.3), 8, 22) * (0.85 + 0.15 * p.armPower());
-  aimAt(p, ax, 1.1, az, speed, 0.02);
+  aimAt(p, ax, 1.1, az, speed, p.team === 1 ? DIFF.passError : 0.02);
   if (m.team === 0 && !m.keeper && !human.auto) { human.p = m; human.switchT = 2.0; human.flash = 0.6; }
 }
 function bestMate(p, forPass = true) {
@@ -859,7 +879,7 @@ function buildCtx() {
     const field = players.filter(p => p.team === team && !p.keeper && p.up);
     if (ball.owner && ball.owner.team !== team) {
       const o = ball.owner.pos;
-      ctx.pressers[team] = field.filter(p => p !== hp).sort((a, b) => a.pos.distanceToSquared(o) - b.pos.distanceToSquared(o)).slice(0, team === 0 && hp ? 1 : 2);
+      ctx.pressers[team] = field.filter(p => p !== hp).sort((a, b) => a.pos.distanceToSquared(o) - b.pos.distanceToSquared(o)).slice(0, team === 0 ? (hp ? 1 : 2) : DIFF.pressers);
     } else if (!ball.owner) {
       let best = null, bd = 1e9;
       for (const p of field) { const d = p.pos.distanceToSquared(landing); if (d < bd) { bd = d; best = p; } }
@@ -876,7 +896,8 @@ function nearestOpponent(p) {
 function aiShoot(p) {
   const gz = -HL * p.side, k = keeperOf(1 - p.team);
   const side = k && k.pos.x > 0.3 ? -1 : k && k.pos.x < -0.3 ? 1 : (Math.random() < 0.5 ? -1 : 1);
-  aimAt(p, side * rand(1.0, 2.6), rand(0.8, 2.3), gz, rand(22, 30) * p.armPower(), 0.05);
+  const d = p.team === 1 ? DIFF : DIFFS.hard;
+  aimAt(p, side * rand(1.0, 2.6), rand(0.8, 2.3), gz, rand(22, 30) * d.shotSpeed * p.armPower(), d.shotNoise);
 }
 function carrierAI(p, dt, decide) {
   p.ai.hold += dt;
@@ -892,7 +913,7 @@ function carrierAI(p, dt, decide) {
   const l = Math.hypot(wx, wz) || 1;
   steer(p, wx / l, wz / l, 1, dt);
   if (!decide) return;
-  if (dG < 19 && (Math.random() < 0.35 || dO < 2.4)) { aiShoot(p); return; }
+  if (dG < (p.team === 1 ? DIFF.shotRange : 19) && (Math.random() < 0.35 || dO < 2.4)) { aiShoot(p); return; }
   if ((dO < 3.4 && Math.random() < 0.5) || (p.ai.hold > 3.5 && Math.random() < 0.25)) { const m = bestMate(p); if (m) passBall(p, m); }
 }
 function keeperAI(p, dt) {
@@ -918,7 +939,7 @@ function keeperAI(p, dt) {
 }
 function aiStep(p, dt, ctx) {
   if (!p.up) return;
-  p.ai.t -= dt; const decide = p.ai.t <= 0; if (decide) p.ai.t = rand(0.15, 0.25);
+  p.ai.t -= dt; const decide = p.ai.t <= 0; if (decide) p.ai.t = p.team === 1 ? rand(DIFF.react[0], DIFF.react[1]) : rand(0.15, 0.25);
   if (p.keeper) return keeperAI(p, dt);
   const owner = ball.owner;
   if (owner === p) return carrierAI(p, dt, decide);
@@ -928,7 +949,7 @@ function aiStep(p, dt, ctx) {
     if (ctx.pressers[p.team].includes(p)) {
       const lx = owner.pos.x + owner.vel.x * 0.35, lz = owner.pos.z + owner.vel.z * 0.35;
       const d = p.pos.distanceTo(owner.pos);
-      if (decide && d < 2.7 && p.diveCD <= 0 && Math.random() < (p.team === 1 ? 0.45 : 0.35)) { startDive(p, lx - p.pos.x, lz - p.pos.z); return; }
+      if (decide && d < (p.team === 1 ? DIFF.diveRange : 2.7) && p.diveCD <= 0 && Math.random() < (p.team === 1 ? DIFF.dive : 0.35)) { startDive(p, lx - p.pos.x, lz - p.pos.z); return; }
       tgt = p.ai.target.set(lx, 0, lz);
     } else tgt = formation(p, false);
   } else {
@@ -1046,11 +1067,12 @@ function ballContacts() {
     const friendly = ball.lastTeam === p.team;
     if (spd < 4 || friendly) { take(p); return; }
     if (p.keeper) {
-      if (Math.random() < clamp(1.25 - spd * 0.022, 0.4, 0.94)) { take(p); audio.roar(0.3); return; }
+      if (Math.random() < clamp(1.25 - spd * 0.022 + (p.team === 1 ? DIFF.keeper : 0), 0.2, 0.94)) { take(p); audio.roar(0.3); return; }
       ball.ignore.add(p); ball.vel.x = -ball.vel.x * 0.3 + rand(-3, 3); ball.vel.z *= -0.35; ball.vel.y = Math.abs(ball.vel.y) + 3;
       feed(`PARRIED BY ${p.name}`, TEAMS[p.team].cls); audio.thunk(); return;
     }
     if (spd > 16) { ballHit(p, spd); return; }
+    if (p.team === 1 && spd > DIFF.intercept) { ball.ignore.add(p); continue; }
     take(p); return;
   }
 }
@@ -1240,6 +1262,13 @@ requestAnimationFrame(frame);
 // ===================================================================
 // Input wiring
 // ===================================================================
+function setDiff(k) {
+  diffKey = k; DIFF = DIFFS[k];
+  try { localStorage.setItem('ironball.diff', k); } catch (e) { /* storage unavailable */ }
+  document.querySelectorAll('.dbtn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === k)));
+}
+document.querySelectorAll('.dbtn').forEach(b => b.addEventListener('click', () => setDiff(b.dataset.diff)));
+setDiff(diffKey);
 function toggleGore() { game.gore = !game.gore; $('goreState').textContent = game.gore ? 'ON' : 'OFF'; feed(game.gore ? 'GORE ON' : 'GORE OFF'); }
 const THROW_KEYS = ['KeyJ', 'KeyK'];
 window.addEventListener('keydown', e => {
@@ -1250,6 +1279,7 @@ window.addEventListener('keydown', e => {
   if (THROW_KEYS.includes(e.code)) input.throwHeld = true;
   if (e.code === 'Enter' && (game.state === 'menu' || game.state === 'full')) startMatch();
   if (e.code === 'KeyG') toggleGore();
+  if (game.state === 'menu' || game.state === 'full') { if (e.code === 'Digit1') setDiff('easy'); if (e.code === 'Digit2') setDiff('normal'); if (e.code === 'Digit3') setDiff('hard'); }
   if (e.code === 'KeyM') audio.toggle();
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyL') input.swap = true;
 });
