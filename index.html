@@ -548,9 +548,16 @@ const keeperOf = t => players.find(p => p.team === t && p.keeper);
 const ball = {
   pos: new THREE.Vector3(0, BALL_R, 0), vel: new THREE.Vector3(), owner: null,
   lastThrower: null, lastTeam: -1, throwT: 0, ignore: new Set(),
-  mesh: new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 22, 16), new THREE.MeshStandardMaterial({ color: 0xdedede, metalness: 1, roughness: 0.22, emissive: 0x2a1000 })),
+  mesh: new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 22, 16), new THREE.MeshStandardMaterial({ color: 0xfff1c0, metalness: 0.6, roughness: 0.3, emissive: 0xffc23a, emissiveIntensity: 1.4 })),
 };
+ball.mesh.scale.setScalar(1.5); // drawn larger than its physics radius so it reads at a glance
 ball.mesh.castShadow = true; scene.add(ball.mesh);
+// glow halo around the ball, and a floor marker that shows where it is when airborne
+const ballGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTexture(), color: 0xffb43a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+ballGlow.scale.setScalar(1.6); scene.add(ballGlow);
+const ballMark = new THREE.Mesh(new THREE.RingGeometry(0.32, 0.46, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.85, depthWrite: false }));
+ballMark.position.y = 0.025; scene.add(ballMark);
+const ballLight = new THREE.PointLight(0xffb43a, 6, 6, 2); scene.add(ballLight);
 const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.72, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0.9, depthWrite: false }));
 ring.position.y = 0.03; scene.add(ring);
 const marker = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.45, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23a }));
@@ -1130,10 +1137,12 @@ function updateCamera(dt) {
   let fx = f.x, fz = f.z;
   if (hp && hp.state !== 'dead' && ball.owner !== hp) { fx = f.x * 0.6 + hp.pos.x * 0.4; fz = f.z * 0.6 + hp.pos.z * 0.4; }
   const k = 1 - Math.exp(-4 * dt);
-  camFocus.x += (clamp(fx, -11, 11) - camFocus.x) * k;
+  camFocus.x += (clamp(fx, -9, 9) - camFocus.x) * k;
   camFocus.z += (clamp(fz, -27, 25) - camFocus.z) * k;
-  const portrait = camera.aspect < 1;
-  const h = portrait ? 21 : 13.5, back = portrait ? 12 : 10;
+  // pick a distance that always shows about 15 m either side of the focus, so play by the walls stays on screen
+  const halfW = 15, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const dist = clamp(halfW / (tanH * camera.aspect), 17, 34);
+  const h = dist * 0.82, back = dist * 0.55;
   const sh = game.shake * 0.3;
   camera.position.set(camFocus.x + rand(-sh, sh), h + rand(-sh, sh), camFocus.z + back);
   camera.lookAt(camFocus.x, 0, camFocus.z - 1.5);
@@ -1174,6 +1183,13 @@ function render(dt) {
   updateCamera(dt);
   for (const p of players) animatePlayer(p, dt);
   ball.mesh.position.copy(ball.pos);
+  ballGlow.position.copy(ball.pos);
+  ballGlow.scale.setScalar(1.5 + Math.sin(performance.now() * 0.012) * 0.2);
+  ballLight.position.copy(ball.pos);
+  ballMark.visible = !ball.owner;
+  ballMark.position.x = ball.pos.x; ballMark.position.z = ball.pos.z;
+  ballMark.scale.setScalar(1 + Math.min(ball.pos.y, 6) * 0.25);
+  ballMark.material.opacity = 0.85 - Math.min(ball.pos.y, 6) * 0.08;
   ball.mesh.rotation.x += ball.vel.z * dt * 3; ball.mesh.rotation.z -= ball.vel.x * dt * 3;
   const hp = human.p;
   ring.visible = !!hp && hp.state !== 'dead' && game.state === 'play';
