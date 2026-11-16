@@ -1136,13 +1136,18 @@ function updateCamera(dt) {
   const f = ball.owner ? ball.owner.pos : ball.pos, hp = human.p;
   let fx = f.x, fz = f.z;
   if (hp && hp.state !== 'dead' && ball.owner !== hp) { fx = f.x * 0.6 + hp.pos.x * 0.4; fz = f.z * 0.6 + hp.pos.z * 0.4; }
-  const k = 1 - Math.exp(-4 * dt);
-  camFocus.x += (clamp(fx, -9, 9) - camFocus.x) * k;
-  camFocus.z += (clamp(fz, -27, 25) - camFocus.z) * k;
-  // pick a distance that always shows about 15 m either side of the focus, so play by the walls stays on screen
+  // pick a distance that shows about 15 m either side of the focus (capped on tall phone screens)
   const halfW = 15, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const dist = clamp(halfW / (tanH * camera.aspect), 17, 34);
+  const dist = clamp(halfW / (tanH * camera.aspect), 17, 38);
   const h = dist * 0.82, back = dist * 0.55;
+  const visW = dist * tanH * camera.aspect; // half-width actually visible at the focus
+  const k = 1 - Math.exp(-4 * dt);
+  const edgeX = Math.max(0, HW + 1 - visW);
+  camFocus.x += (clamp(fx, -edgeX, edgeX) - camFocus.x) * k;
+  camFocus.z += (clamp(fz, -27, 25) - camFocus.z) * k;
+  // hard guarantee: the ball never drifts out of the side of the frame
+  const keepX = visW * 0.6;
+  camFocus.x = clamp(camFocus.x, f.x - keepX, f.x + keepX);
   const sh = game.shake * 0.3;
   camera.position.set(camFocus.x + rand(-sh, sh), h + rand(-sh, sh), camFocus.z + back);
   camera.lookAt(camFocus.x, 0, camFocus.z - 1.5);
