@@ -31,6 +31,16 @@ Phones and tablets get an on-screen stick and two buttons.
 - Players are loud about it: battle cries on a dive, grunts on contact, an "oof" on a whiffed dive, screams on big hits, shrieks when a limb comes off, and death wails that get cut short when the head (or everything) goes. All voices are synthesised live with Web Audio, so there are no sound files, and each player has their own pitch and timbre.
 - Hard tackles and fast throws injure. Big hits can tear off limbs (a missing leg slows the player, a missing arm weakens throws). Dead players are dropped through the floor and a substitute comes on after a few seconds.
 
+## Arena toys (v0.2)
+
+| Toy | What it does |
+| --- | --- |
+| Bumpers | Four steel domes. The ball rebounds faster; the throwing team gets 2 points once per throw. Bodies sliding into them take wall-slam damage. |
+| Wall stars | Four on each side wall. Hit one with a thrown ball to claim it in your colour (+2). Own all four on a wall for a star sweep (+10), then they reset. |
+| Warp chutes | A teal slot in the middle of each side wall. The ball comes out of the opposite wall with the same speed. |
+| Shock pads | Two floor grids. They flicker as a warning, then electrocute anyone on them for about 2.5 seconds. Kills count for the other team. |
+| Power-up tokens | One at a time, every 10 seconds or so. Shield (8 s, immune, tacklers bounce off), Frenzy (8 s, faster and 1.7x tackle damage), Freeze (opponents slowed and can't tackle for 3.5 s), Medkit (+50 health to your team). |
+
 ## Roadmap
 
 See the game plan for later versions: arena toys (bumpers, score multipliers, power-ups) next, then player stats and real ragdolls, then the league and management loop.
