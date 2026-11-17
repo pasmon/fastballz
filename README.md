@@ -28,6 +28,7 @@ Phones and tablets get an on-screen stick and two buttons.
 
 - Two 90-second halves, 5 v 5 (keeper, two defenders, two forwards).
 - Goal: 10 points. Killing an opponent: 10 points. No fouls.
+- Players are loud about it: battle cries on a dive, grunts on contact, an "oof" on a whiffed dive, screams on big hits, shrieks when a limb comes off, and death wails that get cut short when the head (or everything) goes. All voices are synthesised live with Web Audio, so there are no sound files, and each player has their own pitch and timbre.
 - Hard tackles and fast throws injure. Big hits can tear off limbs (a missing leg slows the player, a missing arm weakens throws). Dead players are dropped through the floor and a substitute comes on after a few seconds.
 
 ## Roadmap

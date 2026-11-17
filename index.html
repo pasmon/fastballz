@@ -323,6 +323,7 @@ const audio = {
       const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 520;
       this.crowd = this.ctx.createGain(); this.crowd.gain.value = 0.07;
       s.connect(f).connect(this.crowd).connect(this.master); s.start();
+      this.initVoices();
     } catch (e) { this.ctx = null; }
   },
   nz(type, freq, q, dur, gain, delay = 0) {
@@ -351,6 +352,172 @@ const audio = {
   },
   toggle() { this.muted = !this.muted; if (this.master) this.master.gain.value = this.muted ? 0 : 0.55; },
 };
+
+// ===================================================================
+// Voices: over-the-top grunts, battle cries and screams. Pure formant
+// synthesis: a buzzy glottal source, pushed through a distortion stage,
+// then shaped into vowels by three band-pass formant filters.
+// ===================================================================
+const VOWELS = {
+  AA: [730, 1090, 2440], AH: [640, 1190, 2390], UH: [520, 1190, 2390], OH: [570, 840, 2410], OO: [440, 1020, 2240],
+  EH: [530, 1840, 2480], AE: [660, 1720, 2410], EE: [300, 2290, 3010], ER: [490, 1350, 1690],
+};
+const FORMANT_GAIN = [1, 0.6, 0.32], FORMANT_Q = [5, 8, 11];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function makeVoice(keeper) {
+  const squeaky = Math.random() < 0.18;                 // every so often a player sounds like a startled tenor
+  return {
+    f0: squeaky ? rand(165, 215) : keeper ? rand(72, 92) : rand(88, 135),
+    fs: squeaky ? rand(1.08, 1.18) : rand(0.9, 1.06),   // formant scale: head size, more or less
+    grit: squeaky ? rand(0.2, 0.5) : rand(0.5, 1),
+  };
+}
+// Piecewise-linear lookup over [[x, y], ...] with x in 0..1.
+function envAt(pts, x) {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [a, va] = pts[i - 1], [b, vb] = pts[i]; return va + (vb - va) * (x - a) / ((b - a) || 1); }
+  return pts[pts.length - 1][1];
+}
+function vowelAt(seq, x, k) {
+  if (x <= seq[0][0]) return VOWELS[seq[0][1]][k];
+  for (let i = 1; i < seq.length; i++) if (x <= seq[i][0]) {
+    const [a, va] = seq[i - 1], [b, vb] = seq[i], u = (x - a) / ((b - a) || 1), s = u * u * (3 - 2 * u);
+    return VOWELS[va][k] + (VOWELS[vb][k] - VOWELS[va][k]) * s;
+  }
+  return VOWELS[seq[seq.length - 1][1]][k];
+}
+// The vocal library. Each entry returns a fresh, randomised performance.
+const VOX = {
+  // dive start: "HYAAAAH!" / "RAAAGH!"
+  cry: () => ({
+    pri: 1, dur: rand(0.4, 0.7), gain: 0.9, breath: 0.3, vib: 0.03,
+    pitch: [[0, 1.1], [0.18, rand(1.6, 1.95)], [0.75, rand(1.5, 1.8)], [1, 1.15]],
+    vowels: pick([[[0, 'EE'], [0.15, 'AA'], [1, 'AH']], [[0, 'ER'], [0.2, 'AA'], [1, 'AA']], [[0, 'UH'], [0.2, 'AE'], [0.8, 'AA'], [1, 'ER']]]),
+    amp: [[0, 0], [0.06, 1], [0.75, 0.85], [1, 0]],
+  }),
+  // contact effort from the tackler: "HUNGH!"
+  effort: () => ({
+    pri: 2, dur: rand(0.14, 0.24), gain: 1.35, breath: 0.45, grit: 1,
+    pitch: [[0, 1.3], [1, 0.8]], vowels: [[0, pick(['UH', 'AH', 'OH'])], [1, 'UH']],
+    amp: [[0, 0], [0.08, 1], [0.5, 0.7], [1, 0]],
+  }),
+  // light hit, wall bump, belly flop: "OOF!" / "UGH!"
+  oof: () => ({
+    pri: 2, dur: rand(0.18, 0.3), gain: 1.4, breath: 0.6,
+    pitch: [[0, rand(1.4, 1.8)], [1, 0.85]], vowels: [[0, pick(['OO', 'UH', 'OH'])], [1, 'UH']],
+    amp: [[0, 0], [0.05, 1], [0.35, 0.8], [1, 0]],
+  }),
+  // proper hit: "AAAARRGH!"
+  scream: (i = 1) => ({
+    pri: 3, dur: rand(0.5, 0.75) + 0.35 * i, gain: 1.05, breath: 0.25, vib: 0.045, grit: 1,
+    pitch: [[0, 1.5], [0.12, rand(2.0, 2.4) + 0.3 * i], [0.7, rand(1.8, 2.1) + 0.2 * i], [1, 1.3]],
+    vowels: pick([[[0, 'AA'], [0.6, 'AA'], [0.85, 'ER'], [1, 'ER']], [[0, 'AE'], [0.5, 'AA'], [1, 'UH']], [[0, 'OH'], [0.25, 'AA'], [0.8, 'AA'], [1, 'ER']]]),
+    amp: [[0, 0], [0.04, 1], [0.7, 0.9], [1, 0]],
+  }),
+  // limb torn off: a long, wobbling soprano shriek
+  shriek: () => ({
+    pri: 4, dur: rand(1.1, 1.6), gain: 1.1, breath: 0.2, vib: 0.07, grit: 1, wobble: 7,
+    pitch: [[0, 2.2], [0.08, rand(3.0, 3.6)], [0.55, rand(2.9, 3.3)], [0.8, 2.6], [1, 1.8]],
+    vowels: [[0, 'EE'], [0.2, 'AE'], [0.7, 'AA'], [1, 'AH']],
+    amp: [[0, 0], [0.03, 1], [0.6, 1], [0.85, 0.7], [1, 0]],
+  }),
+  // death: a falling wail that dissolves into a wet gurgle. cut < 1 ends it abruptly (head gone, body gone).
+  death: (cut = 1) => ({
+    pri: 5, dur: rand(1.5, 2.1), cut, gain: 1.1, breath: 0.3, vib: 0.05, grit: 1, gurgle: rand(14, 22),
+    pitch: [[0, 2.3], [0.12, rand(2.8, 3.2)], [0.45, 2.4], [1, 0.75]],
+    vowels: [[0, 'AA'], [0.4, 'AA'], [0.7, 'OH'], [1, 'OO']],
+    amp: [[0, 0], [0.03, 1], [0.5, 0.9], [0.8, 0.6], [1, 0]],
+  }),
+  // knockout with gore off: a long, dazed groan
+  ko: () => ({
+    pri: 5, dur: rand(0.9, 1.2), gain: 1, breath: 0.4, vib: 0.03,
+    pitch: [[0, 1.5], [0.2, 1.3], [1, 0.7]], vowels: [[0, 'OH'], [0.5, 'UH'], [1, 'ER']],
+    amp: [[0, 0], [0.08, 1], [0.7, 0.7], [1, 0]],
+  }),
+};
+Object.assign(audio, {
+  voiceBus: null, live: 0,
+  initVoices() {
+    const c = this.ctx;
+    // a hard-driven compressor keeps a pile-up of screams loud but not clipped
+    const comp = c.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = 0.003; comp.release.value = 0.15;
+    this.voiceBus = c.createGain(); this.voiceBus.gain.value = 1.4;
+    this.voiceBus.connect(comp).connect(this.master);
+    // steel-pit slapback echo
+    const d = c.createDelay(1); d.delayTime.value = 0.13;
+    const fb = c.createGain(); fb.gain.value = 0.28;
+    const wet = c.createGain(); wet.gain.value = 0.22;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200;
+    this.voiceBus.connect(d); d.connect(lp).connect(fb).connect(d); lp.connect(wet).connect(this.master);
+    const k = new Float32Array(1024);
+    for (let i = 0; i < 1024; i++) { const x = (i / 511.5) - 1; k[i] = Math.tanh(x * 2.5) / Math.tanh(2.5); }
+    this.shape = k;
+  },
+  // Make player p perform a vocal from VOX. Returns false when skipped.
+  vox(p, kind, arg) {
+    const c = this.ctx; if (!c || !this.voiceBus || !p) return false;
+    const now = c.currentTime, spec = VOX[kind](arg), v = p.voice;
+    if (p.state === 'dead' && spec.pri < 5) return false;
+    const cur = p.vocal;
+    if (cur && now < cur.end) {
+      if (spec.pri < cur.pri || (spec.pri === cur.pri && spec.pri < 3)) return false;
+      cur.cut.gain.setTargetAtTime(0, now, 0.012); cur.end = now; // a bigger agony interrupts a smaller one
+    } else if (this.live >= 8 && spec.pri < 4) return false;
+
+    const t = now + 0.005, full = spec.dur, dur = full * (spec.cut || 1);
+    const N = Math.max(48, Math.ceil(dur * 400)), grit = clamp(v.grit * (spec.grit ?? 0.7), 0, 1);
+    const f0 = new Float32Array(N), sub = new Float32Array(N), amp = new Float32Array(N), fm = [0, 1, 2].map(() => new Float32Array(N));
+    let jit = 0;
+    for (let i = 0; i < N; i++) {
+      const x = (i / (N - 1)) * dur / full, ts = x * full;   // position in the full performance
+      jit += (rand(-1, 1) - jit) * 0.15;
+      const vib = 1 + (spec.vib || 0) * Math.sin(6.283 * 5.6 * ts) + (spec.wobble ? 0.05 * Math.sin(6.283 * spec.wobble * ts) : 0) + 0.025 * jit;
+      f0[i] = clamp(v.f0 * envAt(spec.pitch, x) * vib, 30, 1400); sub[i] = f0[i] * 0.5;
+      let a = envAt(spec.amp, x);
+      if (spec.gurgle && x > 0.35) a *= 1 - 0.75 * Math.min(1, (x - 0.35) * 3) * (0.5 + 0.5 * Math.sin(6.283 * spec.gurgle * ts + jit));
+      amp[i] = a;
+      for (let k = 0; k < 3; k++) fm[k][i] = vowelAt(spec.vowels, x, k) * v.fs * (k === 0 ? 1 + 0.08 * (envAt(spec.pitch, x) - 1.5) : 1);
+    }
+    if (spec.cut && spec.cut < 1) amp[N - 1] = 0;
+    amp[0] = 0;
+
+    // source: sawtooth glottis + sub-octave growl + breath noise
+    const src = c.createGain(); src.gain.value = 1;
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueCurveAtTime(f0, t, dur);
+    const o2 = c.createOscillator(); o2.type = 'square'; o2.frequency.setValueCurveAtTime(sub, t, dur);
+    const g2 = c.createGain(); g2.gain.value = 0.15 + 0.35 * grit;
+    o.connect(src); o2.connect(g2).connect(src);
+    const n = c.createBufferSource(); n.buffer = this.noise;
+    const nh = c.createBiquadFilter(); nh.type = 'highpass'; nh.frequency.value = 700;
+    const ng = c.createGain(); ng.gain.value = spec.breath * 1.2;
+    n.connect(nh).connect(ng).connect(src);
+    // distortion: the "over the top" part
+    const drive = c.createGain(); drive.gain.value = 1.5 + grit * 5;
+    const ws = c.createWaveShaper(); ws.curve = this.shape; ws.oversample = '2x';
+    src.connect(drive).connect(ws);
+    // vowel formants
+    const mix = c.createGain(); mix.gain.value = 1;
+    for (let k = 0; k < 3; k++) {
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = FORMANT_Q[k];
+      f.frequency.setValueCurveAtTime(fm[k], t, dur);
+      const fg = c.createGain(); fg.gain.value = FORMANT_GAIN[k] * (2.2 + k * 0.9);
+      ws.connect(f).connect(fg).connect(mix);
+    }
+    const dry = c.createGain(); dry.gain.value = 0.06; ws.connect(dry).connect(mix);  // a little raw buzz for bite
+    const env = c.createGain(); env.gain.value = 0; env.gain.setValueCurveAtTime(amp, t, dur);
+    const cut = c.createGain(); cut.gain.value = spec.gain * (0.85 + Math.random() * 0.3);
+    mix.connect(env).connect(cut);
+    let out = cut;
+    if (c.createStereoPanner) { const pn = c.createStereoPanner(); pn.pan.value = clamp(p.pos.x / HW, -1, 1) * 0.6; cut.connect(pn); out = pn; }
+    out.connect(this.voiceBus);
+    const end = t + dur + 0.02;
+    for (const s of [o, o2, n]) { s.start(t, s === n ? Math.random() * 0.5 : undefined); s.stop(end); }
+    this.live++; o.onended = () => { this.live--; out.disconnect(); };
+    p.vocal = { pri: spec.pri, end, cut };
+    return true;
+  },
+});
 
 // ===================================================================
 // Blood: particles that fall, splash and leave decals on the steel
@@ -543,6 +710,7 @@ class Player {
     this.bleedT = 0; this.bleedKey = null; this.charge = 0; this.throwAnim = 0;
     this.ai = { t: Math.random() * 0.2, jx: rand(-1.5, 1.5), jz: rand(-1.5, 1.5), hold: 0, target: new THREE.Vector3() };
     this.m = buildModel(team);
+    this.voice = makeVoice(this.role === 'GK'); this.vocal = null;
   }
   get keeper() { return this.role === 'GK'; }
   get up() { return this.state === 'run'; }
@@ -681,6 +849,7 @@ function startDive(p, dx, dz) {
   p.vel.set(dx * 12.5 * (p.limbs.legL && p.limbs.legR ? 1 : 0.6), 0, dz * 12.5 * (p.limbs.legL && p.limbs.legR ? 1 : 0.6));
   p.yaw = Math.atan2(dx, dz);
   audio.whoosh();
+  if (Math.random() < 0.85) audio.vox(p, 'cry');
 }
 function knockDown(v, dx, dz, strength) {
   dropBall(v, dx, dz);
@@ -717,15 +886,19 @@ function applyDamage(v, dmg, dx, dz, byTeam) {
   audio.crunch(clamp(dmg / 30, 0.4, 1.2));
   if (v.health <= 0) { kill(v, dx, dz, dmg, byTeam); return; }
   knockDown(v, dx, dz, 6 + dmg * 0.2);
+  let torn = false;
   if (game.gore && dmg > 24 && Math.random() < 0.38) {
     const opts = Object.keys(LIMB_NAMES).filter(k => v.limbs[k]);
     if (opts.length) {
       const k = opts[Math.floor(Math.random() * opts.length)];
       severPart(v, k, dx, dz, 7);
       feed(`${LIMB_NAMES[k]} TORN OFF · ${v.name}`, 'blood');
-      audio.splat(1); audio.roar(0.6);
+      audio.splat(1); audio.roar(0.6); torn = true;
     }
   }
+  if (torn) audio.vox(v, 'shriek');
+  else if (dmg > 17) audio.vox(v, 'scream', clamp((dmg - 17) / 25, 0, 1));
+  else audio.vox(v, 'oof');
 }
 function kill(v, dx, dz, dmg, byTeam) {
   dropBall(v, dx, dz);
@@ -735,7 +908,7 @@ function kill(v, dx, dz, dmg, byTeam) {
   if (game.state === 'play') game.score[scorer] += 10;
   audio.splat(1.3); audio.roar(1);
   game.shake = 1.4; game.hitstop = 0.12;
-  if (!game.gore) { feed(`${v.name} KNOCKED OUT · +10 ${TEAMS[scorer].short}`, TEAMS[scorer].cls); return; }
+  if (!game.gore) { audio.vox(v, 'ko'); feed(`${v.name} KNOCKED OUT · +10 ${TEAMS[scorer].short}`, TEAMS[scorer].cls); return; }
   emitBlood(v.pos.x, 1.1, v.pos.z, dx, dz, 260, 8, 4);
   for (let k = 0; k < 6; k++) addDecal(v.pos.x + rand(-1, 1) + dx, v.pos.z + rand(-1, 1) + dz, rand(0.4, 0.9));
   const r = Math.random();
@@ -744,12 +917,15 @@ function kill(v, dx, dz, dmg, byTeam) {
     v.exploded = true;
     for (const k in v.m.stumps) v.m.stumps[k].visible = false;
     spawnChunks(v.pos.x, 1.1, v.pos.z, 12, tmpV.set(dx, 0, dz), 9);
+    audio.vox(v, 'death', 0.16);   // barely gets started
     feed(`${v.name} IS PASTE · +10 ${TEAMS[scorer].short}`, 'blood');
   } else if (r < 0.65) {
     severPart(v, 'head', dx, dz, 9);
     v.m.stumps.head.visible = true;
+    audio.vox(v, 'death', 0.3);    // the head leaves mid-scream
     feed(`DECAPITATED · ${v.name} · +10 ${TEAMS[scorer].short}`, 'blood');
   } else {
+    audio.vox(v, 'death');
     feed(`${v.name} IS DEAD · +10 ${TEAMS[scorer].short}`, 'blood');
   }
 }
@@ -760,6 +936,7 @@ function tackleHit(a, v) {
   const impact = Math.max(4, rel);
   const dmg = 5 + impact * 1.6 + rand(0, 11);
   a.vel.multiplyScalar(0.35);
+  audio.vox(a, 'effort');
   applyDamage(v, dmg, nx, nz, a.team);
 }
 function ballHit(v, spd) {
@@ -777,7 +954,7 @@ function wallSlam(p, speed, nx, nz) {
   audio.crunch(0.6);
   game.shake = Math.min(1.2, game.shake + 0.3);
   if (p.health <= 0) kill(p, -nx, -nz, dmg, -1);
-  else if (dmg > 8) feed(`${p.name} EATS THE WALL`, 'blood');
+  else { audio.vox(p, dmg > 14 ? 'scream' : 'oof', 0.2); if (dmg > 8) feed(`${p.name} EATS THE WALL`, 'blood'); }
 }
 
 // ===================================================================
@@ -1003,7 +1180,7 @@ function stepPlayer(p, dt) {
         if (o.team === p.team || p.hitSet.has(o) || o.state === 'dead' || o.state === 'down') continue;
         if (o.pos.distanceToSquared(p.pos) < 1.15 * 1.15) { p.hitSet.add(o); tackleHit(p, o); }
       }
-      if (p.stateT <= 0) { p.state = 'down'; p.stateT = 0.45; }
+      if (p.stateT <= 0) { p.state = 'down'; p.stateT = 0.45; if (!p.hitSet.size && Math.random() < 0.6) audio.vox(p, 'oof'); }
       break;
     case 'down':
       p.stateT -= dt; damp(4);
@@ -1352,7 +1529,7 @@ renderer.domElement.addEventListener('pointerdown', () => { if (game.state === '
 }
 
 // expose a tiny hook for automated tests
-window.__ironball = { game, players, ball, human, startMatch, step, setPaused };
+window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused };
 })();
 </script>
 </body>
