@@ -41,6 +41,17 @@ Phones and tablets get an on-screen stick and two buttons.
 | Shock pads | Two floor grids. They flicker as a warning, then electrocute anyone on them for about 2.5 seconds. Kills count for the other team. |
 | Power-up tokens | One at a time, every 10 seconds or so. Shield (8 s, immune, tacklers bounce off), Frenzy (8 s, faster and 1.7x tackle damage), Freeze (opponents slowed and can't tackle for 3.5 s), Medkit (+50 health to your team). |
 
+## Ragdolls (v0.3)
+
+Knocked-down and dead players go limp and are thrown by the actual hit: the direction and force of a tackle, a throw or a wall slam decide how they tumble and where they land.
+
+- Bodies slide on the steel, bounce off walls and bumpers, and pile up on each other. A body slammed into a wall or bumper takes slam damage from its real impact speed.
+- Bumpers are sprung, so bodies come off them faster than they arrive. Bodies that slide into a warp chute come out of the opposite wall.
+- Torn-off limbs and heads leave the body where it is, mid-flop, and the stumps keep bleeding. Bleeding bodies leave smears as they slide, and a pool spreads under a fresh corpse.
+- Corpses stay on the pitch until they sink away: the ball bounces off them, runners kick them around and can trip over them (and drop the ball), and a hard throw can knock a limb off one.
+- Ground and pound: diving onto an opponent who is already down does 30% extra damage, and the AI will do it to you. Diving onto a corpse shoves it and can tear bits off.
+- Shock pads keep frying whatever lies on them, corpses included.
+
 ## Roadmap
 
-See the game plan for later versions: arena toys (bumpers, score multipliers, power-ups) next, then player stats and real ragdolls, then the league and management loop.
+Next: player stats (speed, power, toughness, accuracy, aggression) with real body mass, stamina, and a team sheet. Then the league and management loop.
