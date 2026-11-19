@@ -87,6 +87,32 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 #btnC { right: calc(env(safe-area-inset-right, 0px) + 40px); bottom: calc(env(safe-area-inset-bottom, 0px) + 190px); width: 60px; height: 60px; font-size: 10px; }
 #btnB { right: calc(env(safe-area-inset-right, 0px) + 24px); bottom: calc(env(safe-area-inset-bottom, 0px) + 90px); }
 .tbtn.on { background: rgba(255, 122, 26, 0.6); }
+/* player card: the player you control, bottom left */
+#card { position: absolute; left: calc(env(safe-area-inset-left, 0px) + 16px); bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); display: grid; gap: 4px; padding: 6px 10px; background: var(--soot); border-left: 3px solid var(--hound); font-size: 11px; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; min-width: 168px; }
+#card .who { font-weight: 700; font-size: 13px; letter-spacing: 0.12em; }
+#card .who small { color: var(--dim); font-size: 10px; margin-left: 6px; }
+#card .st { display: flex; gap: 8px; color: var(--dim); }
+#card .st b { color: var(--ash); }
+#card .sta { height: 4px; background: rgba(255, 255, 255, 0.12); }
+#card .sta i { display: block; height: 100%; width: 100%; background: #f2d45a; }
+#card .sta.tired i { background: #ff4a3a; }
+@media (pointer: coarse) { #card { bottom: calc(env(safe-area-inset-bottom, 0px) + 164px); } }
+/* team sheet: tall on phones, so it scrolls from the top instead of centring */
+#sheetView { place-items: safe center; background: rgba(11, 9, 7, 0.94); }
+.sheet { max-width: 720px; }
+.squads { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; text-align: left; }
+.squad h2 { margin: 0 0 6px; font-family: var(--display); font-weight: 400; font-size: 24px; letter-spacing: 0.04em; }
+.squad.h h2 { color: var(--hound); } .squad.a h2 { color: var(--warden); }
+.squad .scroll { overflow-x: auto; }
+.squad table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.squad th { font-weight: 700; font-size: 10px; letter-spacing: 0.14em; color: var(--dim); text-align: left; padding: 2px 4px; }
+.squad td { padding: 4px; border-top: 1px solid rgba(255, 122, 26, 0.16); white-space: nowrap; }
+.squad td.nm { font-weight: 700; letter-spacing: 0.08em; }
+.squad td.nm small { display: block; font-weight: 500; color: var(--dim); font-size: 10px; letter-spacing: 0.1em; }
+.bar { display: inline-block; width: 26px; height: 6px; background: rgba(255, 255, 255, 0.1); vertical-align: middle; margin-right: 3px; }
+.bar i { display: block; height: 100%; background: var(--ember); }
+.squad.a .bar i { background: var(--warden); } .squad.h .bar i { background: var(--hound); }
+.sheet .note { margin: 0; font-size: 12px; color: var(--dim); letter-spacing: 0.06em; }
 @media (prefers-reduced-motion: reduce) { .msg { animation-duration: 2.4s; } }
 </style>
 </head>
@@ -101,6 +127,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
   <div id="feed"></div>
   <div id="banner"></div>
   <div id="chargewrap"><div id="charge"></div></div>
+  <div id="card" hidden><div class="who" id="cardWho"></div><div class="st" id="cardSt"></div><div class="sta" id="cardSta"><i></i></div></div>
   <div id="keys">WASD / arrows move · Space pass or tackle · hold J throw · Shift switch · P pause · G gore · M sound</div>
 </div>
 <div id="touch">
@@ -117,6 +144,15 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
     <div class="toggles">Press <b>P</b> or <b>Esc</b> to resume</div>
   </div>
 </div>
+<div id="sheetView" class="overlay" hidden>
+  <div class="panel sheet">
+    <h1 class="mid">TEAM SHEET</h1>
+    <div class="squads"><div class="squad h" id="sq0"></div><div class="squad a" id="sq1"></div></div>
+    <p class="note">SPD speed · POW throws and hits · TGH damage taken and stamina · ACC aim · AGG how eagerly they dive in. Heavier players hit harder and get thrown less.</p>
+    <button id="kickBtn" class="go" type="button">KICK OFF</button>
+    <div class="toggles">Press <b>Enter</b> to kick off · new line-ups every match</div>
+  </div>
+</div>
 <div id="menu" class="overlay">
   <div class="panel">
     <h1>IRONBALL</h1>
@@ -128,6 +164,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
       <dt><kbd>Shift</kbd> or <kbd>L</kbd></dt><dd>Switch to the teammate nearest the ball.</dd>
       <dt><kbd>J</kbd> hold</dt><dd>Charge a throw, release to fire. Aim roughly at the goal and it locks on.</dd>
       <dt>Arena</dt><dd>Hit bumpers and wall stars with the ball for points. The teal slot warps the ball across. Floor grids electrocute. Grab glowing tokens.</dd>
+      <dt>Players</dt><dd>Each player has speed, power, toughness, accuracy and aggression, and a real weight. Running flat out drains stamina: tired players are slower and fall harder.</dd>
       <dt>Bodies</dt><dd>Downed players go limp and fly with the hit. Dive on them while they are down. Corpses stay on the floor until they sink, so watch your feet.</dd>
       <dt><kbd>P</kbd> <kbd>G</kbd> <kbd>M</kbd></dt><dd>Pause. Gore on or off. Sound on or off.</dd>
     </dl>
@@ -172,14 +209,21 @@ const ROLES = ['GK', 'DL', 'DR', 'FL', 'FR'];
 const NAMES = [['Vrask', 'Kell', 'Doma', 'Rook', 'Brann'], ['Ostrid', 'Malk', 'Sever', 'Tygo', 'Hesk']];
 
 const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
+// Player stats (v0.3), 1-10. Roles have archetypes, every match rolls a spread around them.
+const STATS = ['spd', 'pow', 'tgh', 'acc', 'agg'];
+const ARCHETYPES = {
+  GK: { spd: 4, pow: 6, tgh: 8, acc: 6, agg: 4, size: 1.12, label: 'KEEPER' },
+  D:  { spd: 5, pow: 8, tgh: 7, acc: 4, agg: 7, size: 1.09, label: 'DEFENDER' },
+  F:  { spd: 8, pow: 5, tgh: 4, acc: 7, agg: 5, size: 0.92, label: 'FORWARD' },
+};
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
 
-// Difficulty only changes the opposing (blue) team.
+// Difficulty only changes the opposing (blue) team: weaker stats and dimmer AI.
 const DIFFS = {
-  easy:   { label: 'EASY',   speed: 0.85, dive: 0.12, diveRange: 2.0, react: [0.4, 0.65], pressers: 1, shotNoise: 0.14, shotRange: 14, shotSpeed: 0.8, keeper: -0.3, intercept: 8, passError: 0.12 },
-  normal: { label: 'NORMAL', speed: 0.93, dive: 0.26, diveRange: 2.4, react: [0.25, 0.4], pressers: 2, shotNoise: 0.08, shotRange: 17, shotSpeed: 0.9, keeper: -0.12, intercept: 12, passError: 0.06 },
-  hard:   { label: 'HARD',   speed: 1.0,  dive: 0.45, diveRange: 2.7, react: [0.15, 0.25], pressers: 2, shotNoise: 0.05, shotRange: 19, shotSpeed: 1.0, keeper: 0, intercept: 16, passError: 0.02 },
+  easy:   { label: 'EASY',   shift: { spd: -3.5, pow: -1.5, tgh: -1.5, acc: -1.5, agg: -1.5 }, dive: 0.12, diveRange: 2.0, react: [0.4, 0.65], pressers: 1, shotNoise: 0.14, shotRange: 14, shotSpeed: 0.8, keeper: -0.3, intercept: 8, passError: 0.12 },
+  normal: { label: 'NORMAL', shift: { spd: -1.5, pow: -0.5, tgh: -0.5, acc: -0.5, agg: -0.5 }, dive: 0.26, diveRange: 2.4, react: [0.25, 0.4], pressers: 2, shotNoise: 0.08, shotRange: 17, shotSpeed: 0.9, keeper: -0.12, intercept: 12, passError: 0.06 },
+  hard:   { label: 'HARD',   shift: { spd: 0, pow: 0, tgh: 0, acc: 0, agg: 0 },  dive: 0.45, diveRange: 2.7, react: [0.15, 0.25], pressers: 2, shotNoise: 0.05, shotRange: 19, shotSpeed: 1.0, keeper: 0, intercept: 16, passError: 0.02 },
 };
 let diffKey = 'easy';
 try { const v = localStorage.getItem('ironball.diff'); if (v && DIFFS[v]) diffKey = v; } catch (e) { /* storage unavailable */ }
@@ -697,9 +741,12 @@ function buildModel(team) {
   const bg = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
   const fillGeo = new THREE.PlaneGeometry(0.8, 0.06); fillGeo.translate(0.4, 0, 0.001);
   const fill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: T.trim, depthWrite: false })); fill.position.x = -0.4;
-  hb.add(bg, fill); root.add(hb);
+  const sbg = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.06), bg.material); sbg.position.y = -0.085;
+  const sGeo = new THREE.PlaneGeometry(0.8, 0.03); sGeo.translate(0.4, 0, 0.001);
+  const sfill = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({ color: 0xf2d45a, depthWrite: false })); sfill.position.set(-0.4, -0.085, 0);
+  hb.add(bg, fill, sbg, sfill); root.add(hb);
   scene.add(root);
-  return { root, yaw, body, parts, stumps, rest, hb, fill, armor, armorBase: new THREE.Color(T.color) };
+  return { root, yaw, body, parts, stumps, rest, hb, fill, sfill, armor, armorBase: new THREE.Color(T.color) };
 }
 
 class Player {
@@ -718,23 +765,39 @@ class Player {
     this.fx = { shield: 0, frenzy: 0, frozen: 0 }; this.shockT = 0; this.fried = false;
     this.rag = { on: false, pos: new Float32Array(27), prev: new Float32Array(27), speed: 0, smear: 0, pool: 0 };
     this.slamCD = 0; this.warpCD = 0; this.tripCD = 0; this.cooked = false;
+    this.base = { spd: 5, pow: 5, tgh: 5, acc: 5, agg: 5 }; this.size = 1; this.mass = 1; this.sta = 1;
   }
   get keeper() { return this.role === 'GK'; }
-  get up() { return this.state === 'run'; }
-  maxSpeed() {
-    let s = this.keeper ? 7.0 : 7.6;
-    if (this.team === 1) s *= DIFF.speed;
+  get arch() { return ARCHETYPES[this.keeper ? 'GK' : this.role[0]]; }
+  roll() {
+    const A = this.arch;
+    for (const k of STATS) this.base[k] = clamp(Math.round(A[k] + rand(-1.6, 1.6)), 1, 10);
+    this.size = clamp(A.size * rand(0.94, 1.06), 0.85, 1.2);
+    this.mass = this.size ** 3;            // twice as tall would be eight times as heavy
+  }
+  // effective stat, after the difficulty shift on the Wardens
+  stat(k) { return clamp(this.base[k] + (this.team === 1 ? DIFF.shift[k] : 0), 1, 10); }
+  get kg() { return Math.round(96 * this.mass); }
+  tired() { return clamp(this.sta / 0.35, 0, 1); }          // 1 = fresh enough, 0 = spent
+  baseSpeed() {
+    let s = (this.keeper ? 6.0 : 6.35) + 0.25 * this.stat('spd');
     if (ball.owner === this) s *= 0.93;
     s *= (this.limbs.legL ? 1 : 0.5) * (this.limbs.legR ? 1 : 0.5);
     if (this.fx.frenzy > 0) s *= 1.2;
     if (this.fx.frozen > 0) s *= 0.35;
     return s;
   }
-  armPower() { return (this.limbs.armL ? 1 : 0.75) * (this.limbs.armR ? 1 : 0.75); }
+  tank() { return (0.75 + 0.05 * this.stat('tgh')) * Math.sqrt(this.size); }
+  aimNoise() { return 1.5 - 0.1 * this.stat('acc'); }       // 5 = as before, 10 = half the spread
+  aggro() { return 0.5 + 0.1 * this.stat('agg'); }
+  get up() { return this.state === 'run'; }
+  maxSpeed() { return this.baseSpeed() * (0.78 + 0.22 * this.tired()); }
+  armPower() { return (0.82 + 0.036 * this.stat('pow')) * (this.limbs.armL ? 1 : 0.75) * (this.limbs.armR ? 1 : 0.75); }
   handPos(out) {
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
-    if (this.charge > 0) return out.set(this.pos.x - fx * 0.3 + fz * 0.3, 1.9, this.pos.z - fz * 0.3 - fx * 0.3);
-    return out.set(this.pos.x + fx * 0.45, 1.15, this.pos.z + fz * 0.45);
+    const z = this.size;
+    if (this.charge > 0) return out.set(this.pos.x + (-fx * 0.3 + fz * 0.3) * z, 1.9 * z, this.pos.z + (-fz * 0.3 - fx * 0.3) * z);
+    return out.set(this.pos.x + fx * 0.45 * z, 1.15 * z, this.pos.z + fz * 0.45 * z);
   }
   homeSpot(out) {
     const s = this.side;
@@ -751,7 +814,7 @@ class Player {
   }
   restore() {
     ragEnd(this);
-    this.health = 100; this.sink = 0; this.exploded = false; this.bleedT = 0; this.cooked = false;
+    this.health = 100; this.sink = 0; this.exploded = false; this.bleedT = 0; this.cooked = false; this.sta = 1;
     this.fx.shield = this.fx.frenzy = this.fx.frozen = 0; this.fried = false;
     for (const k in this.limbs) { this.limbs[k] = 1; this.m.parts[k].visible = true; this.m.stumps[k].visible = false; }
     this.m.parts.torso.visible = true;
@@ -761,6 +824,8 @@ class Player {
 
 const players = [];
 for (let t = 0; t < 2; t++) for (let i = 0; i < 5; i++) players.push(new Player(t, i));
+function rollSquads() { for (const p of players) p.roll(); }
+rollSquads();
 const keeperOf = t => players.find(p => p.team === t && p.keeper);
 
 // ===================================================================
@@ -793,12 +858,12 @@ function ragStart(p, dx, dz, strength) {
   const h = strength * 0.7, px = -dz, pz = dx, twist = rand(-1, 1) * strength * 0.25;
   for (let i = 0; i < RAG_N; i++) {
     // start from the pose the player is drawn in right now (lean from a dive or a get-up included)
-    const [lx, ly0, lz0] = RAG_REST[i];
+    const sz = p.size, lx = RAG_REST[i][0] * sz, ly0 = RAG_REST[i][1] * sz, lz0 = RAG_REST[i][2] * sz;
     const ly = ly0 * cf - lz0 * sf + lift, lz = ly0 * sf + lz0 * cf;
     const k = i * 3;
-    P[k] = p.pos.x + lx * cy + lz * sy; P[k + 1] = Math.max(RAG_R[i], ly); P[k + 2] = p.pos.z - lx * sy + lz * cy;
+    P[k] = p.pos.x + lx * cy + lz * sy; P[k + 1] = Math.max(RAG_R[i] * sz, ly); P[k + 2] = p.pos.z - lx * sy + lz * cy;
     // the hit drives the top half harder than the feet, so the body topples instead of sliding upright
-    const top = clamp((ly0 - 0.5) / 1.3, -0.4, 1), side = lx * twist;
+    const top = clamp((ly0 / sz - 0.5) / 1.3, -0.4, 1), side = lx * twist;
     const vx = p.vel.x + dx * h * (0.55 + 0.7 * top) + px * side;
     const vz = p.vel.z + dz * h * (0.55 + 0.7 * top) + pz * side;
     const vy = strength * 0.22 * Math.max(0, top) + rand(0, 0.6);
@@ -819,7 +884,7 @@ function ragEnd(p) {
   const r = p.rag; if (!r.on) return;
   r.on = false;
   const m = p.m;
-  for (const k in m.parts) { m.parts[k].position.copy(m.rest[k]); m.parts[k].quaternion.identity(); }
+  for (const k in m.parts) { m.parts[k].position.copy(m.rest[k]); m.parts[k].quaternion.identity(); m.parts[k].scale.setScalar(1); }
   m.hb.position.set(0, 2.35, 0); if (m.aura) m.aura.position.set(0, 1.0, 0);
 }
 const ragA = new THREE.Vector3(), ragB = new THREE.Vector3(), ragUp = new THREE.Vector3(), ragRt = new THREE.Vector3(), ragFw = new THREE.Vector3();
@@ -844,13 +909,15 @@ function ragLimb(obj, P, j, e, ox, oy, oz) {
 }
 function ragPose(p) {
   const m = p.m, P = p.rag.pos, parts = m.parts;
-  m.root.position.set(0, -p.sink, 0); m.yaw.rotation.set(0, 0, 0); m.body.rotation.set(0, 0, 0); m.body.position.set(0, 0, 0);
+  m.root.position.set(0, -p.sink, 0); m.root.scale.setScalar(1); m.yaw.rotation.set(0, 0, 0); m.body.rotation.set(0, 0, 0); m.body.position.set(0, 0, 0);
+  for (const k in parts) parts[k].scale.setScalar(p.size);   // in world space now, so each part carries the body's size
   ragFrame(p);
+  const sz = p.size;
   ragM.makeBasis(ragRt, ragUp, ragFw);
   parts.torso.quaternion.setFromRotationMatrix(ragM);
-  parts.torso.position.copy(ragA).addScaledVector(ragUp, 0.36);
+  parts.torso.position.copy(ragA).addScaledVector(ragUp, 0.36 * sz);
   // head pivot sits just above the shoulder line
-  const nx = ragB.x + ragUp.x * 0.08, ny = ragB.y + ragUp.y * 0.08, nz = ragB.z + ragUp.z * 0.08;
+  const nx = ragB.x + ragUp.x * 0.08 * sz, ny = ragB.y + ragUp.y * 0.08 * sz, nz = ragB.z + ragUp.z * 0.08 * sz;
   parts.head.position.set(nx, ny, nz);
   ragY.set(P[12] - nx, P[13] - ny, P[14] - nz).normalize();
   ragX.copy(ragRt).addScaledVector(ragY, -ragRt.dot(ragY)).normalize(); ragZ.crossVectors(ragX, ragY);
@@ -859,7 +926,7 @@ function ragPose(p) {
     parts[k].position.set(P[j * 3], P[j * 3 + 1], P[j * 3 + 2]);
     ragLimb(parts[k], P, j, e, 0, 0, 0);
   }
-  m.hb.position.set(ragA.x, 1.6, ragA.z);
+  m.hb.position.set(ragA.x, 1.6 * sz, ragA.z);
   if (m.aura) m.aura.position.set(ragA.x, 0.5, ragA.z);
 }
 // lying body -> the canned lying pose the get-up animation starts from
@@ -868,7 +935,7 @@ function ragGetUp(p) {
   const faceDown = ragFw.y < 0, hl = Math.hypot(ragUp.x, ragUp.z) || 1, ux = ragUp.x / hl, uz = ragUp.z / hl;
   p.fallDir = faceDown ? 1 : -1; p.fall = faceDown ? 1.5 : -1.5;
   p.yaw = faceDown ? Math.atan2(ux, uz) : Math.atan2(-ux, -uz);
-  p.pos.set(clamp(ragA.x - ux * 0.9, -HW + 0.5, HW - 0.5), 0, clamp(ragA.z - uz * 0.9, -HL + 0.5, HL - 0.5));
+  p.pos.set(clamp(ragA.x - ux * 0.9 * p.size, -HW + 0.5, HW - 0.5), 0, clamp(ragA.z - uz * 0.9 * p.size, -HL + 0.5, HL - 0.5));
   p.vel.set(0, 0, 0);
   ragEnd(p);
 }
@@ -883,7 +950,7 @@ function ragImpact(p, i, speed, nx, nz) {
   return true;
 }
 function ragCollide(p, i, final, dt) {
-  const P = p.rag.pos, Q = p.rag.prev, k = i * 3, r = RAG_R[i];
+  const P = p.rag.pos, Q = p.rag.prev, k = i * 3, r = RAG_R[i] * p.size;
   if (P[k + 1] < r) P[k + 1] = r;
   // the floor is enforced every iteration; walls and bumpers once at the end, where they can bounce
   if (!final) return;
@@ -897,12 +964,16 @@ function ragCollide(p, i, final, dt) {
     const s = Math.sign(P[k]), v = P[k] - Q[k];
     P[k] = s * limX; Q[k] = P[k] + v * 0.35; ragImpact(p, i, Math.abs(v) / dt, s, 0);
   }
-  const ax = Math.abs(P[k]), inMouth = ax < GOAL_HW - r && P[k + 1] < GOAL_H - r;
-  const limZ = inMouth ? HL + GOAL_D - r : HL - r;
-  if (Math.abs(P[k + 2]) > limZ) {
-    const s = Math.sign(P[k + 2]), v = P[k + 2] - Q[k + 2];
-    P[k + 2] = s * limZ; Q[k + 2] = P[k + 2] + v * 0.35; ragImpact(p, i, Math.abs(v) / dt, 0, s);
-  } else if (Math.abs(P[k + 2]) > HL && ax > GOAL_HW - r) P[k] = Math.sign(P[k]) * (GOAL_HW - r);   // inside the net
+  // inside the goal net, its sides, roof and back hold the body; elsewhere the end wall does
+  const az = Math.abs(P[k + 2]), s = Math.sign(P[k + 2]);
+  if (az > HL + 0.05) {
+    if (Math.abs(P[k]) > GOAL_HW - r) P[k] = Math.sign(P[k]) * (GOAL_HW - r);
+    if (P[k + 1] > GOAL_H - r) P[k + 1] = GOAL_H - r;
+    if (az > HL + GOAL_D - r) { const v = P[k + 2] - Q[k + 2]; P[k + 2] = s * (HL + GOAL_D - r); Q[k + 2] = P[k + 2] + v * 0.35; ragImpact(p, i, Math.abs(v) / dt, 0, s); }
+  } else if (az > HL - r && !(Math.abs(P[k]) < GOAL_HW - r && P[k + 1] < GOAL_H - r)) {
+    const v = P[k + 2] - Q[k + 2];
+    P[k + 2] = s * (HL - r); Q[k + 2] = P[k + 2] + v * 0.35; ragImpact(p, i, Math.abs(v) / dt, 0, s);
+  }
   if (P[k + 1] > BUMPER_H + 0.5 + r) return;                      // domed cap included
   for (const b of bumpers) {
     const dx = P[k] - b.x, dz = P[k + 2] - b.z, d = Math.hypot(dx, dz), R = BUMPER_R + r;
@@ -912,13 +983,14 @@ function ragCollide(p, i, final, dt) {
     P[k] = b.x + nx * R; P[k + 2] = b.z + nz * R;
     if (vn < 0) {
       // bumpers are sprung: they throw bodies back harder than they arrive
-      Q[k] = P[k] - (vx - 1.8 * vn * nx); Q[k + 2] = P[k + 2] - (vz - 1.8 * vn * nz);
+      const e = -vn / dt > 3 ? 1.8 : 1.2;                        // slow contact (a body wedged against it) gets no spring
+      Q[k] = P[k] - (vx - e * vn * nx); Q[k + 2] = P[k + 2] - (vz - e * vn * nz);
       if (ragImpact(p, i, -vn / dt, -nx, -nz)) { b.flash = 1; b.color.setHex(0xff2a1a); audio.bong(0.6); }
     }
   }
 }
 function ragStep(p, dt) {
-  const r = p.rag, P = r.pos, Q = r.prev, L = p.limbs, g = G * dt * dt;
+  const r = p.rag, P = r.pos, Q = r.prev, L = p.limbs, g = G * dt * dt, sz = p.size;
   let vmax = 0;
   for (let i = 0; i < RAG_N; i++) {
     const k = i * 3;
@@ -944,13 +1016,20 @@ function ragStep(p, dt) {
       const a = c.a * 3, b = c.b * 3;
       const dx = P[b] - P[a], dy = P[b + 1] - P[a + 1], dz = P[b + 2] - P[a + 2];
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
-      if (c.min && d >= c.len) continue;
-      const wa = RAG_W[c.a], wb = RAG_W[c.b], s = (d - c.len) / (d * (wa + wb));
+      const len = c.len * sz;
+      if (c.min && d >= len) continue;
+      const wa = RAG_W[c.a], wb = RAG_W[c.b], s = (d - len) / (d * (wa + wb));
       P[a] += dx * s * wa; P[a + 1] += dy * s * wa; P[a + 2] += dz * s * wa;
       P[b] -= dx * s * wb; P[b + 1] -= dy * s * wb; P[b + 2] -= dz * s * wb;
     }
     const final = it === 7;
     for (let i = 0; i < RAG_N; i++) if (ragOn(p, i)) ragCollide(p, i, final, dt);
+  }
+  // safety valve: a body wedged between a post and a wall can't be pumped up to silly speeds
+  const cap = 30 * dt;
+  for (let i = 0; i < RAG_N; i++) {
+    const k = i * 3, vx = P[k] - Q[k], vy = P[k + 1] - Q[k + 1], vz = P[k + 2] - Q[k + 2], v = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    if (v > cap) { const f = cap / v; Q[k] = P[k] - vx * f; Q[k + 1] = P[k + 1] - vy * f; Q[k + 2] = P[k + 2] - vz * f; }
   }
   r.speed = vmax;
   // the body's "position" is its pelvis
@@ -1028,7 +1107,7 @@ function ragBall() {
     const P = p.rag.pos, Q = p.rag.prev;
     for (let i = 0; i < RAG_N; i++) {
       if (!ragOn(p, i)) continue;
-      const k = i * 3, R = RAG_R[i] + BALL_R;
+      const k = i * 3, R = RAG_R[i] * p.size + BALL_R;
       const dx = B.x - P[k], dy = B.y - P[k + 1], dz = B.z - P[k + 2], d2 = dx * dx + dy * dy + dz * dz;
       if (d2 > R * R) continue;
       const d = Math.sqrt(d2) || 1e-5, nx = dx / d, ny = dy / d, nz = dz / d;
@@ -1133,7 +1212,7 @@ function passBall(p, m) {
   const ax = m.pos.x + m.vel.x * t0 * 0.85, az = m.pos.z + m.vel.z * t0 * 0.85;
   const d = Math.hypot(ax - p.pos.x, az - p.pos.z);
   const speed = clamp(d / clamp(d / 17, 0.22, 1.3), 8, 22) * (0.85 + 0.15 * p.armPower());
-  aimAt(p, ax, 1.1, az, speed, p.team === 1 ? DIFF.passError : 0.02);
+  aimAt(p, ax, 1.1, az, speed, (p.team === 1 ? DIFF.passError : 0.02) * p.aimNoise());
   if (m.team === 0 && !m.keeper && !human.auto) { human.p = m; human.switchT = 2.0; human.flash = 0.6; human.recv = m; human.recvT = d / speed + 0.6; }
 }
 function bestMate(p, forPass = true) {
@@ -1167,14 +1246,18 @@ function startDive(p, dx, dz) {
   if (p.fx.frozen > 0) return;
   const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
   p.state = 'dive'; p.stateT = 0.38; p.fallDir = 1; p.hitSet.clear(); p.diveCD = 1.0;
-  p.vel.set(dx * 12.5 * (p.limbs.legL && p.limbs.legR ? 1 : 0.6), 0, dz * 12.5 * (p.limbs.legL && p.limbs.legR ? 1 : 0.6));
+  const dv = 12.5 * (p.limbs.legL && p.limbs.legR ? 1 : 0.6) * (0.75 + 0.25 * p.tired());   // tired dives fall short
+  p.vel.set(dx * dv, 0, dz * dv);
+  p.sta = Math.max(0, p.sta - 0.1 / p.tank());
   p.yaw = Math.atan2(dx, dz);
   audio.whoosh();
   if (Math.random() < 0.85) audio.vox(p, 'cry');
 }
 function knockDown(v, dx, dz, strength) {
   dropBall(v, dx, dz);
-  v.state = 'down'; v.stateT = 0.9 + strength * 0.035; v.fallDir = -1;
+  const spent = 1 - v.tired();
+  strength *= 1 + 0.4 * spent;                                   // tired legs go down harder and stay down longer
+  v.state = 'down'; v.stateT = 0.9 + strength * 0.035 + 0.5 * spent; v.fallDir = -1;
   v.yaw = Math.atan2(-dx, -dz);
   v.charge = 0;
   if (v.rag.on) ragImpulse(v, dx, dz, strength);
@@ -1187,10 +1270,10 @@ function severPart(v, key, dx, dz, power) {
   const pivot = v.m.parts[key]; if (!pivot.visible) return;
   if (v.rag.on) ragPose(v);
   v.m.root.updateMatrixWorld(true);
-  const c = PART_CENTER[key], wp = pivot.localToWorld(c.clone());
+  const c = PART_CENTER[key], wp = pivot.localToWorld(c.clone());  // includes the body's size
   pivot.getWorldQuaternion(tmpQ);
-  const holder = new THREE.Group(); holder.position.copy(wp); holder.quaternion.copy(tmpQ);
-  const clone = pivot.clone(true); clone.position.copy(c).negate(); clone.rotation.set(0, 0, 0); clone.visible = true;
+  const holder = new THREE.Group(); holder.position.copy(wp); holder.quaternion.copy(tmpQ); holder.scale.setScalar(v.size);
+  const clone = pivot.clone(true); clone.position.copy(c).negate(); clone.rotation.set(0, 0, 0); clone.scale.setScalar(1); clone.visible = true;
   clone.traverse(o => { if (o.isMesh && o.material === v.m.armor) { o.material = v.m.armor.clone(); o.material.userData.owned = true; } });
   holder.add(clone);
   pivot.visible = false;
@@ -1200,9 +1283,10 @@ function severPart(v, key, dx, dz, power) {
 }
 const LIMB_NAMES = { armL: 'LEFT ARM', armR: 'RIGHT ARM', legL: 'LEFT LEG', legR: 'RIGHT LEG' };
 
-function applyDamage(v, dmg, dx, dz, byTeam) {
+function applyDamage(v, dmg, dx, dz, byTeam, fling = 1) {
   if (v.state === 'dead') return;
   if (v.fx.shield > 0) { audio.zap(0.4); return; }
+  dmg *= 1.25 - 0.05 * v.stat('tgh');                           // toughness 5 = as before
   v.health -= dmg; tint(v);
   emitBlood(v.pos.x, 1.2, v.pos.z, dx, dz, dmg * 5, 4 + dmg * 0.12);
   addDecal(v.pos.x + dx * 0.8, v.pos.z + dz * 0.8, rand(0.3, 0.6), Math.atan2(dx, dz), 2);
@@ -1210,9 +1294,9 @@ function applyDamage(v, dmg, dx, dz, byTeam) {
   game.hitstop = Math.max(game.hitstop, dmg > 25 ? 0.07 : 0.03);
   audio.crunch(clamp(dmg / 30, 0.4, 1.2));
   if (v.health <= 0) { kill(v, dx, dz, dmg, byTeam); return; }
-  knockDown(v, dx, dz, 6 + dmg * 0.2);
+  knockDown(v, dx, dz, (6 + dmg * 0.2) * fling);
   let torn = false;
-  if (game.gore && dmg > 24 && Math.random() < 0.38) {
+  if (game.gore && dmg > 18 + 1.2 * v.stat('tgh') && Math.random() < 0.38) {
     const opts = Object.keys(LIMB_NAMES).filter(k => v.limbs[k]);
     if (opts.length) {
       const k = opts[Math.floor(Math.random() * opts.length)];
@@ -1272,11 +1356,13 @@ function tackleHit(a, v) {
     knockDown(a, -nx, -nz, 9); return;
   }
   const pound = v.state === 'down';
-  const dmg = (5 + impact * 1.6 + rand(0, 11)) * (a.fx.frenzy > 0 ? 1.7 : 1) * (pound ? 1.3 : 1);
+  // momentum: a heavy hitter flattens a light runner, a light one bounces off a heavy one
+  const ratio = a.mass / v.mass, fling = clamp(ratio, 0.55, 1.9);
+  const dmg = (5 + impact * 1.6 + rand(0, 11)) * (a.fx.frenzy > 0 ? 1.7 : 1) * (pound ? 1.3 : 1) * (0.75 + 0.05 * a.stat('pow')) * Math.sqrt(ratio);
   if (pound) feed(`GROUND AND POUND · ${a.name} ON ${v.name}`, TEAMS[a.team].cls);
   a.vel.multiplyScalar(0.35);
   audio.vox(a, 'effort');
-  applyDamage(v, dmg, nx, nz, a.team);
+  applyDamage(v, dmg, nx, nz, a.team, fling);
 }
 function ballHit(v, spd) {
   const l = Math.hypot(ball.vel.x, ball.vel.z) || 1, dx = ball.vel.x / l, dz = ball.vel.z / l;
@@ -1286,7 +1372,7 @@ function ballHit(v, spd) {
   applyDamage(v, dmg, dx, dz, ball.lastTeam);
 }
 function wallSlam(p, speed, nx, nz) {
-  const dmg = (speed - 5) * 3;
+  const dmg = (speed - 5) * 3 * (1.25 - 0.05 * p.stat('tgh'));
   if (dmg <= 2 || p.state === 'dead') return;
   p.health -= dmg; tint(p);
   emitBlood(p.pos.x, 0.9, p.pos.z, nx, nz, dmg * 4, 3, 2);
@@ -1320,7 +1406,7 @@ function humanThrow(p) {
     // lock onto the goal mouth along the facing line
     const t = (gz - p.pos.z) / (fz || 1e-4);
     const ax = clamp(p.pos.x + fx * t, -GOAL_HW + 0.5, GOAL_HW - 0.5);
-    aimAt(p, ax, 1.0 + c * 0.6, gz, speed, 0.11 - 0.08 * c);
+    aimAt(p, ax, 1.0 + c * 0.6, gz, speed, (0.11 - 0.08 * c) * p.aimNoise());
   } else {
     throwBall(p, fx, fz, speed, 2.5 + 2 * c);
   }
@@ -1392,7 +1478,7 @@ function predictLanding() {
   return landing.set(clamp(ball.pos.x + ball.vel.x * t, -HW + 0.5, HW - 0.5), 0, clamp(ball.pos.z + ball.vel.z * t, -HL + 0.5, HL - 0.5));
 }
 function steer(p, wx, wz, scale, dt) {
-  const max = p.maxSpeed() * scale, acc = 28 * dt;
+  const max = p.maxSpeed() * scale, acc = (24 + 0.8 * p.stat('spd')) * dt;
   let dx = wx * max - p.vel.x, dz = wz * max - p.vel.z;
   const l = Math.hypot(dx, dz);
   if (l > acc) { dx *= acc / l; dz *= acc / l; }
@@ -1451,7 +1537,7 @@ function aiShoot(p) {
   const gz = -HL * p.side, k = keeperOf(1 - p.team);
   const side = k && k.pos.x > 0.3 ? -1 : k && k.pos.x < -0.3 ? 1 : (Math.random() < 0.5 ? -1 : 1);
   const d = p.team === 1 ? DIFF : DIFFS.hard;
-  aimAt(p, side * rand(1.0, 2.6), rand(0.8, 2.3), gz, rand(22, 30) * d.shotSpeed * p.armPower(), d.shotNoise);
+  aimAt(p, side * rand(1.0, 2.6), rand(0.8, 2.3), gz, rand(22, 30) * d.shotSpeed * p.armPower(), d.shotNoise * p.aimNoise());
 }
 function carrierAI(p, dt, decide) {
   p.ai.hold += dt;
@@ -1502,7 +1588,7 @@ function aiStep(p, dt, ctx) {
   if (decide && p.diveCD <= 0 && ctx.chasers[p.team] !== p) {
     for (const o of players) {
       if (o.team === p.team || o.state !== 'down' || !o.rag.on) continue;
-      if (o.pos.distanceTo(p.pos) < 2.4 && Math.random() < (p.team === 1 ? DIFF.dive * 0.6 : 0.2)) { startDive(p, o.pos.x - p.pos.x, o.pos.z - p.pos.z); return; }
+      if (o.pos.distanceTo(p.pos) < 2.4 && Math.random() < (p.team === 1 ? DIFF.dive * 0.6 : 0.2) * p.aggro()) { startDive(p, o.pos.x - p.pos.x, o.pos.z - p.pos.z); return; }
     }
   }
   let tgt;
@@ -1511,7 +1597,7 @@ function aiStep(p, dt, ctx) {
     if (ctx.pressers[p.team].includes(p)) {
       const lx = owner.pos.x + owner.vel.x * 0.35, lz = owner.pos.z + owner.vel.z * 0.35;
       const d = p.pos.distanceTo(owner.pos);
-      if (decide && d < (p.team === 1 ? DIFF.diveRange : 2.7) && p.diveCD <= 0 && Math.random() < (p.team === 1 ? DIFF.dive : 0.35)) { startDive(p, lx - p.pos.x, lz - p.pos.z); return; }
+      if (decide && d < (p.team === 1 ? DIFF.diveRange : 2.7) + (p.stat('agg') - 5) * 0.08 && p.diveCD <= 0 && Math.random() < (p.team === 1 ? DIFF.dive : 0.35) * p.aggro()) { startDive(p, lx - p.pos.x, lz - p.pos.z); return; }
       tgt = p.ai.target.set(lx, 0, lz);
     } else tgt = formation(p, false);
   } else {
@@ -1529,7 +1615,10 @@ function stepPlayer(p, dt) {
   const damp = k => { const f = Math.exp(-k * dt); p.vel.x *= f; p.vel.z *= f; };
   switch (p.state) {
     case 'run': {
-      const sp = Math.hypot(p.vel.x, p.vel.z);
+      const sp = Math.hypot(p.vel.x, p.vel.z), frac = sp / p.baseSpeed();
+      // flat out drains the tank (about 12 s from full for an average player); easing off refills it
+      if (frac > 0.72) p.sta = Math.max(0, p.sta - 0.085 * (frac - 0.72) / 0.28 * dt / p.tank());
+      else p.sta = Math.min(1, p.sta + (frac < 0.4 ? 0.14 : 0.07) * dt);
       if (sp > 0.6) {
         const want = Math.atan2(p.vel.x, p.vel.z);
         let d = want - p.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -1549,7 +1638,7 @@ function stepPlayer(p, dt) {
       if (p.stateT <= 0) { p.state = 'down'; p.stateT = 0.45; if (!p.hitSet.size && Math.random() < 0.6) audio.vox(p, 'oof'); }
       break;
     case 'down':
-      p.stateT -= dt;
+      p.stateT -= dt; p.sta = Math.min(1, p.sta + 0.05 * dt);
       if (p.rag.on) {
         ragStep(p, dt);
         // up once the body has stopped moving (or has lain there long enough)
@@ -1604,8 +1693,9 @@ function separate() {
       const b = players[j]; if (b.state === 'dead' || b.state === 'down') continue;
       const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, d2 = dx * dx + dz * dz;
       if (d2 < 0.81 && d2 > 1e-6) {
-        const d = Math.sqrt(d2), push = (0.9 - d) / 2, nx = dx / d, nz = dz / d;
-        a.pos.x -= nx * push; a.pos.z -= nz * push; b.pos.x += nx * push; b.pos.z += nz * push;
+        // the lighter body gives way
+        const d = Math.sqrt(d2), push = 0.9 - d, nx = dx / d, nz = dz / d, wa = b.mass / (a.mass + b.mass), wb = 1 - wa;
+        a.pos.x -= nx * push * wa; a.pos.z -= nz * push * wa; b.pos.x += nx * push * wb; b.pos.z += nz * push * wb;
       }
     }
   }
@@ -1644,7 +1734,7 @@ function ballContacts() {
     if (p.state === 'dead' || p.state === 'down') continue;
     if (p === ball.lastThrower && ball.throwT < 0.35) continue;
     if (ball.ignore.has(p)) continue;
-    const reach = p.keeper ? 1.35 : 0.9, top = p.keeper ? 2.9 : 2.3;
+    const reach = (p.keeper ? 1.35 : 0.9) * p.size, top = (p.keeper ? 2.9 : 2.3) * p.size;
     if (ball.pos.y > top) continue;
     const dx = ball.pos.x - p.pos.x, dz = ball.pos.z - p.pos.z;
     if (dx * dx + dz * dz > reach * reach) continue;
@@ -1992,11 +2082,52 @@ function toysRender(dt) {
 // Match flow
 // ===================================================================
 function setupKickoff() {
-  for (const p of players) if (p.state !== 'dead') p.reset(false);
+  for (const p of players) if (p.state !== 'dead') { p.reset(false); p.sta = Math.min(1, p.sta + (game.half === 2 && game.time === MATCH_HALF ? 1 : 0.25)); }
   ball.owner = null; ball.pos.set(0, BALL_R, 0); ball.vel.set(0, 0, 0); ball.lastTeam = -1; ball.ignore.clear(); ball.lastThrower = null;
   game.state = 'kickoff'; game.stateT = 1.3; banner('');
   resetToys(false);
   human.p = null;
+}
+// Team sheet: shown before every match, with fresh line-ups
+const ROLE_NAMES = { GK: 'KEEPER', DL: 'DEFENDER L', DR: 'DEFENDER R', FL: 'FORWARD L', FR: 'FORWARD R' };
+function squadTable(team) {
+  const el = $('sq' + team); el.textContent = '';
+  const h = document.createElement('h2'); h.textContent = TEAMS[team].name; el.appendChild(h);
+  const wrap = document.createElement('div'); wrap.className = 'scroll';
+  const t = document.createElement('table');
+  const head = t.insertRow(); for (const c of ['PLAYER', 'KG', 'SPD', 'POW', 'TGH', 'ACC', 'AGG']) { const th = document.createElement('th'); th.textContent = c; head.appendChild(th); }
+  for (const p of players.filter(q => q.team === team)) {
+    const r = t.insertRow();
+    const nm = r.insertCell(); nm.className = 'nm'; nm.textContent = p.name.toUpperCase();
+    const sm = document.createElement('small'); sm.textContent = ROLE_NAMES[p.role]; nm.appendChild(sm);
+    r.insertCell().textContent = p.kg;
+    for (const k of STATS) {
+      const c = r.insertCell(), v = Math.round(p.stat(k)), bar = document.createElement('span'), fill = document.createElement('i');
+      bar.className = 'bar'; fill.style.width = v * 10 + '%'; bar.appendChild(fill); c.appendChild(bar); c.appendChild(document.createTextNode(v));
+    }
+  }
+  wrap.appendChild(t); el.appendChild(wrap);
+}
+let sheetOpen = false;
+function showSheet() {
+  audio.init();
+  rollSquads(); squadTable(0); squadTable(1);
+  hud.menu.hidden = true; $('sheetView').hidden = false; sheetOpen = true;
+  $('sheetView').scrollTop = 0; $('kickBtn').focus({ preventScroll: true });
+}
+function kickOff() { if (!sheetOpen) return; sheetOpen = false; $('sheetView').hidden = true; startMatch(); }
+const card = { el: $('card'), who: $('cardWho'), st: $('cardSt'), sta: $('cardSta'), p: null, tired: null };
+function updateCard() {
+  const p = human.p, show = !!p && !human.auto && game.state !== 'menu' && game.state !== 'full';
+  card.el.hidden = !show; if (!show) return;
+  if (card.p !== p) {
+    card.p = p; card.who.textContent = p.name.toUpperCase();
+    const sm = document.createElement('small'); sm.textContent = `${ROLE_NAMES[p.role]} · ${p.kg} KG`; card.who.appendChild(sm);
+    card.st.textContent = '';
+    for (const k of STATS) { const sp = document.createElement('span'); sp.textContent = k.toUpperCase() + ' '; const b = document.createElement('b'); b.textContent = Math.round(p.stat(k)); sp.appendChild(b); card.st.appendChild(sp); }
+  }
+  card.sta.firstChild.style.width = (p.sta * 100).toFixed(0) + '%';
+  const tired = p.sta < 0.35; if (tired !== card.tired) { card.tired = tired; card.sta.classList.toggle('tired', tired); }
 }
 function startMatch() {
   audio.init();
@@ -2093,7 +2224,7 @@ function animatePlayer(p, dt) {
   const m = p.m;
   m.root.visible = p.sink < 2.4;
   if (p.rag.on) { ragPose(p); hbUpdate(p); return; }
-  m.root.position.set(p.pos.x, -p.sink, p.pos.z);
+  m.root.position.set(p.pos.x, -p.sink, p.pos.z); m.root.scale.setScalar(p.size);
   m.yaw.rotation.y = p.yaw;
   let target = 0;
   if (p.state === 'dive') target = 1.35;
@@ -2125,6 +2256,8 @@ function hbUpdate(p) {
   m.hb.quaternion.copy(camera.quaternion);
   m.fill.scale.x = Math.max(0.001, p.health / 100);
   m.fill.material.color.setHex(p.health > 40 ? TEAMS[p.team].trim : 0xff2a1a);
+  m.sfill.scale.x = Math.max(0.001, p.sta);
+  m.sfill.material.color.setHex(p.sta < 0.35 ? 0xff4a3a : 0xf2d45a);
 }
 function render(dt) {
   updateCamera(dt);
@@ -2160,6 +2293,7 @@ function render(dt) {
   const ch = hp && ball.owner === hp ? hp.charge : 0;
   hud.charge.style.width = (ch * 100).toFixed(0) + '%';
   hud.chargewrap.style.opacity = ball.owner === hp && hp ? 1 : 0.25;
+  updateCard();
   renderer.render(scene, camera);
 }
 
@@ -2213,9 +2347,10 @@ window.addEventListener('keydown', e => {
   keys.add(e.code); audio.init();
   if (e.code === 'Space') input.pressA = true;
   if (THROW_KEYS.includes(e.code)) input.throwHeld = true;
-  if (e.code === 'Enter' && (game.state === 'menu' || game.state === 'full')) startMatch();
+  if (e.code === 'Enter' && sheetOpen) kickOff();
+  else if (e.code === 'Enter' && (game.state === 'menu' || game.state === 'full')) showSheet();
   if (e.code === 'KeyG') toggleGore();
-  if (game.state === 'menu' || game.state === 'full') { if (e.code === 'Digit1') setDiff('easy'); if (e.code === 'Digit2') setDiff('normal'); if (e.code === 'Digit3') setDiff('hard'); }
+  if ((game.state === 'menu' || game.state === 'full') && !sheetOpen) { if (e.code === 'Digit1') setDiff('easy'); if (e.code === 'Digit2') setDiff('normal'); if (e.code === 'Digit3') setDiff('hard'); }
   if (e.code === 'KeyM') audio.toggle();
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyL') input.swap = true;
 });
@@ -2224,8 +2359,9 @@ window.addEventListener('keyup', e => {
   if (THROW_KEYS.includes(e.code) && !THROW_KEYS.some(k => keys.has(k))) { input.throwHeld = false; input.throwReleased = true; }
 });
 window.addEventListener('blur', () => { keys.clear(); input.throwHeld = false; setPaused(true); });
-$('startBtn').addEventListener('click', () => startMatch());
-renderer.domElement.addEventListener('pointerdown', () => { if (game.state === 'full') startMatch(); });
+$('startBtn').addEventListener('click', () => showSheet());
+$('kickBtn').addEventListener('click', () => kickOff());
+renderer.domElement.addEventListener('pointerdown', () => { if (game.state === 'full' && !sheetOpen) showSheet(); });
 
 // touch controls
 {
@@ -2250,7 +2386,7 @@ renderer.domElement.addEventListener('pointerdown', () => { if (game.state === '
 }
 
 // expose a tiny hook for automated tests
-window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused, knockDown, kill };
+window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused, knockDown, kill, showSheet, kickOff, rollSquads };
 })();
 </script>
 </body>
