@@ -54,7 +54,7 @@ Knocked-down and dead players go limp and are thrown by the actual hit: the dire
 
 ## Players (v0.3)
 
-Every player has five stats from 1 to 10 and a body weight. Before each match a team sheet shows both line-ups, freshly rolled around each position's archetype, and a card in the corner shows the player you control.
+Every player has an old-school Finnish first name (Jorma, Erkki, Väinö and 53 more, drawn fresh each match), five stats from 1 to 10 and a body weight. Before each match a team sheet shows both line-ups, freshly rolled around each position's archetype, and a card in the corner shows the player you control.
 
 | Stat | What it changes |
 | --- | --- |

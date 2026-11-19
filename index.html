@@ -206,7 +206,12 @@ const TEAMS = [
   { name: 'COBALT WARDENS', short: 'WARDENS', color: 0x2452c4, trim: 0xd9e4ff, visor: 0x4fd2ff, cls: 'warden' },
 ];
 const ROLES = ['GK', 'DL', 'DR', 'FL', 'FR'];
-const NAMES = [['Vrask', 'Kell', 'Doma', 'Rook', 'Brann'], ['Ostrid', 'Malk', 'Sever', 'Tygo', 'Hesk']];
+// Old-school Finnish first names. Each match draws ten different ones for the two line-ups.
+const NAME_POOL = ['Jorma', 'Erkki', 'Pertti', 'Seppo', 'Kalevi', 'Raimo', 'Tauno', 'Veikko', 'Reijo', 'Pentti',
+  'Arvo', 'Eino', 'Toivo', 'Urho', 'Onni', 'Väinö', 'Aarne', 'Esko', 'Martti', 'Olavi', 'Paavo', 'Rauno', 'Sulo',
+  'Taisto', 'Unto', 'Viljo', 'Yrjö', 'Heikki', 'Kauko', 'Matti', 'Oiva', 'Pekka', 'Risto', 'Tapio', 'Uuno',
+  'Voitto', 'Aimo', 'Hannes', 'Jaakko', 'Keijo', 'Mauno', 'Niilo', 'Reino', 'Sakari', 'Teuvo', 'Veli', 'Lauri',
+  'Ensio', 'Aulis', 'Topi', 'Vilho', 'Kustaa', 'Allan', 'Leevi', 'Eero', 'Ilmari'];
 
 const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
 // Player stats (v0.3), 1-10. Roles have archetypes, every match rolls a spread around them.
@@ -752,7 +757,7 @@ function buildModel(team) {
 class Player {
   constructor(team, idx) {
     this.team = team; this.idx = idx; this.role = ROLES[idx]; this.side = team === 0 ? 1 : -1;
-    this.name = NAMES[team][idx];
+    this.name = NAME_POOL[team * 5 + idx];
     this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3();
     this.yaw = 0; this.state = 'run'; this.stateT = 0; this.health = 100;
     this.limbs = { head: 1, armL: 1, armR: 1, legL: 1, legR: 1 };
@@ -824,7 +829,11 @@ class Player {
 
 const players = [];
 for (let t = 0; t < 2; t++) for (let i = 0; i < 5; i++) players.push(new Player(t, i));
-function rollSquads() { for (const p of players) p.roll(); }
+function rollSquads() {
+  const pool = NAME_POOL.slice();
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  players.forEach((p, i) => { p.roll(); p.name = pool[i]; });
+}
 rollSquads();
 const keeperOf = t => players.find(p => p.team === t && p.keeper);
 
@@ -2111,7 +2120,7 @@ function squadTable(team) {
 let sheetOpen = false;
 function showSheet() {
   audio.init();
-  rollSquads(); squadTable(0); squadTable(1);
+  rollSquads(); squadTable(0); squadTable(1); card.p = null;
   hud.menu.hidden = true; $('sheetView').hidden = false; sheetOpen = true;
   $('sheetView').scrollTop = 0; $('kickBtn').focus({ preventScroll: true });
 }
