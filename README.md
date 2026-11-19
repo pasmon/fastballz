@@ -20,7 +20,7 @@ You can also serve the folder, for example `npx serve .` or `python3 -m http.ser
 | P or Esc | Pause (the game also pauses when you leave the tab) |
 | G | Gore on or off |
 | M | Sound on or off |
-| Enter | Start match / rematch |
+| Enter | Start match / rematch, then kick off from the team sheet |
 
 Phones and tablets get an on-screen stick and two buttons.
 
@@ -52,6 +52,23 @@ Knocked-down and dead players go limp and are thrown by the actual hit: the dire
 - Ground and pound: diving onto an opponent who is already down does 30% extra damage, and the AI will do it to you. Diving onto a corpse shoves it and can tear bits off.
 - Shock pads keep frying whatever lies on them, corpses included.
 
+## Players (v0.3)
+
+Every player has an old-school Finnish first name (Jorma, Erkki, Väinö and 53 more, drawn fresh each match), five stats from 1 to 10 and a body weight. Before each match a team sheet shows both line-ups, freshly rolled around each position's archetype, and a card in the corner shows the player you control.
+
+| Stat | What it changes |
+| --- | --- |
+| SPD | Top speed and acceleration |
+| POW | Throw and pass speed, tackle damage |
+| TGH | Damage taken, how easily limbs come off, and the size of the stamina tank |
+| ACC | Aim error on throws, passes and shots |
+| AGG | How eagerly the AI dives in, including onto players who are already down |
+
+- Keepers are big and tough, defenders are heavy hitters, forwards are light, fast and accurate.
+- Weight is real: hits trade momentum by mass, so a 140 kg defender hitting a 75 kg forward does more damage and throws them much further than the other way round. Heavier players also shoulder lighter ones aside.
+- Stamina: running flat out and diving drain it, easing off refills it, half time tops it up. Below about a third, a player runs and dives slower and goes down harder and for longer. It shows as the yellow bar under each health bar.
+- Difficulty now lowers the Wardens' stats (most of all their speed) as well as dimming their AI.
+
 ## Roadmap
 
-Next: player stats (speed, power, toughness, accuracy, aggression) with real body mass, stamina, and a team sheet. Then the league and management loop.
+Next: the league and management loop (v0.4).
