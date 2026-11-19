@@ -128,6 +128,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
       <dt><kbd>Shift</kbd> or <kbd>L</kbd></dt><dd>Switch to the teammate nearest the ball.</dd>
       <dt><kbd>J</kbd> hold</dt><dd>Charge a throw, release to fire. Aim roughly at the goal and it locks on.</dd>
       <dt>Arena</dt><dd>Hit bumpers and wall stars with the ball for points. The teal slot warps the ball across. Floor grids electrocute. Grab glowing tokens.</dd>
+      <dt>Bodies</dt><dd>Downed players go limp and fly with the hit. Dive on them while they are down. Corpses stay on the floor until they sink, so watch your feet.</dd>
       <dt><kbd>P</kbd> <kbd>G</kbd> <kbd>M</kbd></dt><dd>Pause. Gore on or off. Sound on or off.</dd>
     </dl>
     <p class="rules">Goal 10 · Kill 10 · Bumper 2 · Wall star 2 · Star sweep 10 · Two 90-second halves · No fouls</p>
@@ -685,10 +686,12 @@ function buildModel(team) {
   // stumps, shown when a part is torn off
   const stumps = {};
   for (const k of ['head', 'armL', 'armR', 'legL', 'legR']) {
+    // stumps ride on the torso, so they follow it when the body goes limp
     const st = new THREE.Mesh(GEO.stump, meatMat); st.visible = false;
-    st.position.copy(parts[k].position); if (k === 'head') st.position.y -= 0.02;
-    body.add(st); stumps[k] = st;
+    st.position.copy(parts[k].position).sub(torso.position); if (k === 'head') st.position.y -= 0.02;
+    torso.add(st); stumps[k] = st;
   }
+  const rest = {}; for (const k in parts) rest[k] = parts[k].position.clone();
   // health bar, billboarded
   const hb = new THREE.Group(); hb.position.y = 2.35;
   const bg = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
@@ -696,7 +699,7 @@ function buildModel(team) {
   const fill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: T.trim, depthWrite: false })); fill.position.x = -0.4;
   hb.add(bg, fill); root.add(hb);
   scene.add(root);
-  return { root, yaw, body, parts, stumps, hb, fill, armor, armorBase: new THREE.Color(T.color) };
+  return { root, yaw, body, parts, stumps, rest, hb, fill, armor, armorBase: new THREE.Color(T.color) };
 }
 
 class Player {
@@ -713,6 +716,8 @@ class Player {
     this.m = buildModel(team);
     this.voice = makeVoice(this.role === 'GK'); this.vocal = null;
     this.fx = { shield: 0, frenzy: 0, frozen: 0 }; this.shockT = 0; this.fried = false;
+    this.rag = { on: false, pos: new Float32Array(27), prev: new Float32Array(27), speed: 0, smear: 0, pool: 0 };
+    this.slamCD = 0; this.warpCD = 0; this.tripCD = 0; this.cooked = false;
   }
   get keeper() { return this.role === 'GK'; }
   get up() { return this.state === 'run'; }
@@ -741,10 +746,12 @@ class Player {
     this.homeSpot(this.pos); this.vel.set(0, 0, 0);
     this.yaw = this.side === 1 ? Math.PI : 0;
     this.state = 'run'; this.fall = 0; this.charge = 0;
+    ragEnd(this);
     if (full) this.restore();
   }
   restore() {
-    this.health = 100; this.sink = 0; this.exploded = false; this.bleedT = 0;
+    ragEnd(this);
+    this.health = 100; this.sink = 0; this.exploded = false; this.bleedT = 0; this.cooked = false;
     this.fx.shield = this.fx.frenzy = this.fx.frozen = 0; this.fried = false;
     for (const k in this.limbs) { this.limbs[k] = 1; this.m.parts[k].visible = true; this.m.stumps[k].visible = false; }
     this.m.parts.torso.visible = true;
@@ -755,6 +762,314 @@ class Player {
 const players = [];
 for (let t = 0; t < 2; t++) for (let i = 0; i < 5; i++) players.push(new Player(t, i));
 const keeperOf = t => players.find(p => p.team === t && p.keeper);
+
+// ===================================================================
+// Ragdolls (v0.3): knocked-down and dead players become Verlet particle bodies
+// ===================================================================
+// Nine particles: 0 hipL 1 hipR 2 shoulderL 3 shoulderR 4 head 5 handL 6 handR 7 footL 8 footR.
+// Each body part is drawn from the particles it spans, so a torn-off limb is just a joint that lets go.
+const RAG_N = 9;
+const RAG_REST = [[-0.14, 0.92, 0], [0.14, 0.92, 0], [-0.38, 1.52, 0], [0.38, 1.52, 0], [0, 1.78, 0], [-0.38, 0.9, 0], [0.38, 0.9, 0], [-0.14, 0.08, 0], [0.14, 0.08, 0]];
+const RAG_R = [0.13, 0.13, 0.15, 0.15, 0.2, 0.09, 0.09, 0.1, 0.1];
+const RAG_W = [1, 1, 1, 1, 1.3, 1.8, 1.8, 1.5, 1.5];              // inverse mass: limbs are lighter than the trunk
+const RAG_PART = [null, null, null, null, 'head', 'armL', 'armR', 'legL', 'legR'];
+const restDist = (i, j) => Math.hypot(RAG_REST[i][0] - RAG_REST[j][0], RAG_REST[i][1] - RAG_REST[j][1], RAG_REST[i][2] - RAG_REST[j][2]);
+// [a, b, length, part, min]: min links are joint limits that only push apart
+const RAG_LINKS = [
+  [0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2],                 // rigid trunk
+  [4, 2, 0, 'head'], [4, 3, 0, 'head'], [4, 0, 0.8, 'head', 1], [4, 1, 0.8, 'head', 1],
+  [5, 2, 0, 'armL'], [5, 1, 0.4, 'armL', 1], [5, 3, 0.5, 'armL', 1],
+  [6, 3, 0, 'armR'], [6, 0, 0.4, 'armR', 1], [6, 2, 0.5, 'armR', 1],
+  [7, 0, 0, 'legL'], [7, 2, 1.0, 'legL', 1], [7, 1, 0.7, 'legL', 1], [7, 3, 1.1, 'legL', 1],
+  [8, 1, 0, 'legR'], [8, 3, 1.0, 'legR', 1], [8, 0, 0.7, 'legR', 1], [8, 2, 1.1, 'legR', 1],
+].map(([a, b, len = 0, part = null, min = 0]) => ({ a, b, len: len || restDist(a, b), part, min }));
+const ragOn = (p, i) => !RAG_PART[i] || p.limbs[RAG_PART[i]];
+
+function ragStart(p, dx, dz, strength) {
+  if (!p.m.parts.torso.visible) return;                           // nothing left to flop
+  const r = p.rag, P = r.pos, Q = r.prev;
+  const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw), f = p.fall, cf = Math.cos(f), sf = Math.sin(f);
+  const lift = Math.abs(f) > 0.2 ? 0.12 * Math.min(1, Math.abs(f)) : 0;
+  const h = strength * 0.7, px = -dz, pz = dx, twist = rand(-1, 1) * strength * 0.25;
+  for (let i = 0; i < RAG_N; i++) {
+    // start from the pose the player is drawn in right now (lean from a dive or a get-up included)
+    const [lx, ly0, lz0] = RAG_REST[i];
+    const ly = ly0 * cf - lz0 * sf + lift, lz = ly0 * sf + lz0 * cf;
+    const k = i * 3;
+    P[k] = p.pos.x + lx * cy + lz * sy; P[k + 1] = Math.max(RAG_R[i], ly); P[k + 2] = p.pos.z - lx * sy + lz * cy;
+    // the hit drives the top half harder than the feet, so the body topples instead of sliding upright
+    const top = clamp((ly0 - 0.5) / 1.3, -0.4, 1), side = lx * twist;
+    const vx = p.vel.x + dx * h * (0.55 + 0.7 * top) + px * side;
+    const vz = p.vel.z + dz * h * (0.55 + 0.7 * top) + pz * side;
+    const vy = strength * 0.22 * Math.max(0, top) + rand(0, 0.6);
+    Q[k] = P[k] - vx * STEP; Q[k + 1] = P[k + 1] - vy * STEP; Q[k + 2] = P[k + 2] - vz * STEP;
+  }
+  r.on = true; r.speed = h; r.smear = 0; r.pool = 0;
+}
+// a kick to a body that is already down
+function ragImpulse(p, dx, dz, strength, up = 0.3) {
+  const r = p.rag, Q = r.prev; if (!r.on) return;
+  const h = strength * 0.7;
+  for (let i = 0; i < RAG_N; i++) {
+    const k = i * 3, s = rand(0.6, 1.2) * RAG_W[i];
+    Q[k] -= dx * h * s * STEP; Q[k + 2] -= dz * h * s * STEP; Q[k + 1] -= (strength * up * s + rand(0, 1)) * STEP;
+  }
+}
+function ragEnd(p) {
+  const r = p.rag; if (!r.on) return;
+  r.on = false;
+  const m = p.m;
+  for (const k in m.parts) { m.parts[k].position.copy(m.rest[k]); m.parts[k].quaternion.identity(); }
+  m.hb.position.set(0, 2.35, 0); if (m.aura) m.aura.position.set(0, 1.0, 0);
+}
+const ragA = new THREE.Vector3(), ragB = new THREE.Vector3(), ragUp = new THREE.Vector3(), ragRt = new THREE.Vector3(), ragFw = new THREE.Vector3();
+function ragFrame(p) {
+  // trunk frame: up runs hips -> shoulders, right runs left -> right, forward = right x up
+  const P = p.rag.pos;
+  ragA.set((P[0] + P[3]) / 2, (P[1] + P[4]) / 2, (P[2] + P[5]) / 2);          // hip midpoint
+  ragB.set((P[6] + P[9]) / 2, (P[7] + P[10]) / 2, (P[8] + P[11]) / 2);        // shoulder midpoint
+  ragUp.subVectors(ragB, ragA).normalize();
+  ragRt.set(P[9] - P[6] + P[3] - P[0], P[10] - P[7] + P[4] - P[1], P[11] - P[8] + P[5] - P[2]);
+  ragRt.addScaledVector(ragUp, -ragRt.dot(ragUp)).normalize();
+  ragFw.crossVectors(ragRt, ragUp);
+}
+const ragM = new THREE.Matrix4(), ragX = new THREE.Vector3(), ragY = new THREE.Vector3(), ragZ = new THREE.Vector3();
+function ragLimb(obj, P, j, e, ox, oy, oz) {
+  // a limb hangs along its local -y from the pivot particle j toward the end particle e
+  ragY.set(P[j * 3] + ox - P[e * 3], P[j * 3 + 1] + oy - P[e * 3 + 1], P[j * 3 + 2] + oz - P[e * 3 + 2]).normalize();
+  ragX.copy(ragRt).addScaledVector(ragY, -ragRt.dot(ragY));
+  if (ragX.lengthSq() < 1e-4) ragX.copy(ragFw);
+  ragX.normalize(); ragZ.crossVectors(ragX, ragY);
+  ragM.makeBasis(ragX, ragY, ragZ); obj.quaternion.setFromRotationMatrix(ragM);
+}
+function ragPose(p) {
+  const m = p.m, P = p.rag.pos, parts = m.parts;
+  m.root.position.set(0, -p.sink, 0); m.yaw.rotation.set(0, 0, 0); m.body.rotation.set(0, 0, 0); m.body.position.set(0, 0, 0);
+  ragFrame(p);
+  ragM.makeBasis(ragRt, ragUp, ragFw);
+  parts.torso.quaternion.setFromRotationMatrix(ragM);
+  parts.torso.position.copy(ragA).addScaledVector(ragUp, 0.36);
+  // head pivot sits just above the shoulder line
+  const nx = ragB.x + ragUp.x * 0.08, ny = ragB.y + ragUp.y * 0.08, nz = ragB.z + ragUp.z * 0.08;
+  parts.head.position.set(nx, ny, nz);
+  ragY.set(P[12] - nx, P[13] - ny, P[14] - nz).normalize();
+  ragX.copy(ragRt).addScaledVector(ragY, -ragRt.dot(ragY)).normalize(); ragZ.crossVectors(ragX, ragY);
+  ragM.makeBasis(ragX, ragY, ragZ); parts.head.quaternion.setFromRotationMatrix(ragM);
+  for (const [k, j, e] of [['armL', 2, 5], ['armR', 3, 6], ['legL', 0, 7], ['legR', 1, 8]]) {
+    parts[k].position.set(P[j * 3], P[j * 3 + 1], P[j * 3 + 2]);
+    ragLimb(parts[k], P, j, e, 0, 0, 0);
+  }
+  m.hb.position.set(ragA.x, 1.6, ragA.z);
+  if (m.aura) m.aura.position.set(ragA.x, 0.5, ragA.z);
+}
+// lying body -> the canned lying pose the get-up animation starts from
+function ragGetUp(p) {
+  ragFrame(p);
+  const faceDown = ragFw.y < 0, hl = Math.hypot(ragUp.x, ragUp.z) || 1, ux = ragUp.x / hl, uz = ragUp.z / hl;
+  p.fallDir = faceDown ? 1 : -1; p.fall = faceDown ? 1.5 : -1.5;
+  p.yaw = faceDown ? Math.atan2(ux, uz) : Math.atan2(-ux, -uz);
+  p.pos.set(clamp(ragA.x - ux * 0.9, -HW + 0.5, HW - 0.5), 0, clamp(ragA.z - uz * 0.9, -HL + 0.5, HL - 0.5));
+  p.vel.set(0, 0, 0);
+  ragEnd(p);
+}
+function ragImpact(p, i, speed, nx, nz) {
+  // trunk or head slamming into a wall or bumper at speed
+  if (i > 4 || speed < 5 || p.slamCD > 0) return false;
+  p.slamCD = 0.35;
+  if (p.state === 'dead') {
+    audio.crunch(clamp(speed / 14, 0.3, 0.9));
+    if (game.gore) emitBlood(p.pos.x + nx * 0.4, 0.8, p.pos.z + nz * 0.4, nx, nz, speed * 4, 3, 2);
+  } else wallSlam(p, speed, nx, nz);
+  return true;
+}
+function ragCollide(p, i, final, dt) {
+  const P = p.rag.pos, Q = p.rag.prev, k = i * 3, r = RAG_R[i];
+  if (P[k + 1] < r) P[k + 1] = r;
+  // the floor is enforced every iteration; walls and bumpers once at the end, where they can bounce
+  if (!final) return;
+  if (P[k + 1] <= r + 0.003) {
+    if (P[k + 1] < Q[k + 1]) Q[k + 1] = P[k + 1];
+    const f = Math.exp(-3 * dt);                                    // steel + blood: bodies slide a fair way
+    Q[k] = P[k] - (P[k] - Q[k]) * f; Q[k + 2] = P[k + 2] - (P[k + 2] - Q[k + 2]) * f;
+  }
+  const limX = HW - r;
+  if (Math.abs(P[k]) > limX) {
+    const s = Math.sign(P[k]), v = P[k] - Q[k];
+    P[k] = s * limX; Q[k] = P[k] + v * 0.35; ragImpact(p, i, Math.abs(v) / dt, s, 0);
+  }
+  const ax = Math.abs(P[k]), inMouth = ax < GOAL_HW - r && P[k + 1] < GOAL_H - r;
+  const limZ = inMouth ? HL + GOAL_D - r : HL - r;
+  if (Math.abs(P[k + 2]) > limZ) {
+    const s = Math.sign(P[k + 2]), v = P[k + 2] - Q[k + 2];
+    P[k + 2] = s * limZ; Q[k + 2] = P[k + 2] + v * 0.35; ragImpact(p, i, Math.abs(v) / dt, 0, s);
+  } else if (Math.abs(P[k + 2]) > HL && ax > GOAL_HW - r) P[k] = Math.sign(P[k]) * (GOAL_HW - r);   // inside the net
+  if (P[k + 1] > BUMPER_H + 0.5 + r) return;                      // domed cap included
+  for (const b of bumpers) {
+    const dx = P[k] - b.x, dz = P[k + 2] - b.z, d = Math.hypot(dx, dz), R = BUMPER_R + r;
+    if (d >= R || d < 1e-5) continue;
+    const nx = dx / d, nz = dz / d;
+    const vx = P[k] - Q[k], vz = P[k + 2] - Q[k + 2], vn = vx * nx + vz * nz;   // velocity before the push-out
+    P[k] = b.x + nx * R; P[k + 2] = b.z + nz * R;
+    if (vn < 0) {
+      // bumpers are sprung: they throw bodies back harder than they arrive
+      Q[k] = P[k] - (vx - 1.8 * vn * nx); Q[k + 2] = P[k + 2] - (vz - 1.8 * vn * nz);
+      if (ragImpact(p, i, -vn / dt, -nx, -nz)) { b.flash = 1; b.color.setHex(0xff2a1a); audio.bong(0.6); }
+    }
+  }
+}
+function ragStep(p, dt) {
+  const r = p.rag, P = r.pos, Q = r.prev, L = p.limbs, g = G * dt * dt;
+  let vmax = 0;
+  for (let i = 0; i < RAG_N; i++) {
+    const k = i * 3;
+    const vx = (P[k] - Q[k]) * 0.999, vy = (P[k + 1] - Q[k + 1]) * 0.999, vz = (P[k + 2] - Q[k + 2]) * 0.999;
+    Q[k] = P[k]; Q[k + 1] = P[k + 1]; Q[k + 2] = P[k + 2];
+    P[k] += vx; P[k + 1] += vy - g; P[k + 2] += vz;
+    if (i < 4) vmax = Math.max(vmax, Math.hypot(vx, vz) / dt);
+  }
+  // warp chutes take bodies too: the pelvis sliding into a chute comes out of the far wall, still moving
+  {
+    const hx = (P[0] + P[3]) / 2, hy = (P[1] + P[4]) / 2, hz = (P[2] + P[5]) / 2, s = Math.sign(hx);
+    const vx = (hx - (Q[0] + Q[3]) / 2) / dt;
+    if (Math.abs(hx) > HW - 0.7 && Math.abs(hz) < WARP_HZ - 0.3 && hy < WARP_H && p.warpCD <= 0 && vx * s > 1.5 && p.sink <= 0) {
+      const shift = -s * (2 * HW - 1.6);
+      for (let i = 0; i < RAG_N; i++) { P[i * 3] += shift; Q[i * 3] += shift; }
+      p.warpCD = 0.8; warp.flash = 1; audio.warp();
+      feed(`${p.name} ${p.state === 'dead' ? 'TAKES THE CHUTE' : 'GETS WARPED'}`, TEAMS[p.team].cls);
+    }
+  }
+  for (let it = 0; it < 8; it++) {
+    for (const c of RAG_LINKS) {
+      if (c.part && !L[c.part]) continue;
+      const a = c.a * 3, b = c.b * 3;
+      const dx = P[b] - P[a], dy = P[b + 1] - P[a + 1], dz = P[b + 2] - P[a + 2];
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+      if (c.min && d >= c.len) continue;
+      const wa = RAG_W[c.a], wb = RAG_W[c.b], s = (d - c.len) / (d * (wa + wb));
+      P[a] += dx * s * wa; P[a + 1] += dy * s * wa; P[a + 2] += dz * s * wa;
+      P[b] -= dx * s * wb; P[b + 1] -= dy * s * wb; P[b + 2] -= dz * s * wb;
+    }
+    const final = it === 7;
+    for (let i = 0; i < RAG_N; i++) if (ragOn(p, i)) ragCollide(p, i, final, dt);
+  }
+  r.speed = vmax;
+  // the body's "position" is its pelvis
+  const hx = (P[0] + P[3]) / 2, hy = (P[1] + P[4]) / 2, hz = (P[2] + P[5]) / 2;
+  p.vel.set((hx - (Q[0] + Q[3]) / 2) / dt, 0, (hz - (Q[2] + Q[5]) / 2) / dt);
+  p.pos.set(hx, 0, hz);
+  if (!game.gore || p.sink > 0 || p.exploded) return;
+  // bleeding bodies leave smears as they slide
+  const bleeding = p.state === 'dead' || p.bleedT > 0 || p.health < 45;
+  if (bleeding && hy < 0.4 && vmax > 1.2) {
+    r.smear += vmax * dt;
+    if (r.smear > 0.3) { r.smear = 0; addDecal(hx + rand(-0.15, 0.15), hz + rand(-0.15, 0.15), rand(0.16, 0.28), Math.atan2(p.vel.x, p.vel.z), clamp(vmax * 0.4, 1.5, 3.5)); }
+  }
+  // and a pool spreads under a fresh corpse
+  if (p.state === 'dead' && vmax < 1 && p.stateT < 4.5) {
+    r.pool -= dt;
+    if (r.pool <= 0) { r.pool = 0.45; addDecal(hx + rand(-0.3, 0.3), hz + rand(-0.3, 0.3), 0.35 + p.stateT * 0.12); }
+  }
+}
+// bodies against the ball, the players running over them, and each other
+const ragList = [];
+function ragWorld() {
+  ragList.length = 0;
+  for (const p of players) if (p.rag.on && p.sink <= 0.2) ragList.push(p);
+  if (!ragList.length) return;
+  for (const q of players) {
+    if (q.rag.on || q.sink > 0 || q.state === 'dead') continue;
+    for (const p of ragList) {
+      const P = p.rag.pos, Q = p.rag.prev;
+      if ((p.pos.x - q.pos.x) ** 2 + (p.pos.z - q.pos.z) ** 2 > 4) continue;
+      const qs = Math.hypot(q.vel.x, q.vel.z);
+      for (let i = 0; i < RAG_N; i++) {
+        const k = i * 3;
+        if (!ragOn(p, i) || P[k + 1] > 0.8) continue;
+        const dx = P[k] - q.pos.x, dz = P[k + 2] - q.pos.z, d2 = dx * dx + dz * dz;
+        if (d2 > 0.42 * 0.42 || d2 < 1e-6) continue;
+        // boots shove whatever they run through
+        const d = Math.sqrt(d2), nx = dx / d, nz = dz / d;
+        P[k] = q.pos.x + nx * 0.42; P[k + 2] = q.pos.z + nz * 0.42;
+        const kick = q.state === 'dive' ? 1.3 : 0.9;
+        Q[k] = P[k] - (q.vel.x * kick + nx * 1.5) * STEP; Q[k + 2] = P[k + 2] - (q.vel.z * kick + nz * 1.5) * STEP;
+        Q[k + 1] = P[k + 1] - rand(0.5, 2) * STEP;
+      }
+      // and sometimes the runner goes over the top
+      if (q.state === 'run' && qs > 6 && q.tripCD <= 0 && (p.pos.x - q.pos.x) ** 2 + (p.pos.z - q.pos.z) ** 2 < 0.45 * 0.45) {
+        q.tripCD = 1.2;
+        if (Math.random() < 0.25) {
+          knockDown(q, q.vel.x / qs, q.vel.z / qs, 4);
+          audio.vox(q, 'oof'); audio.thunk();
+          feed(`${q.name} TRIPS OVER ${p.state === 'dead' ? 'THE BODY' : p.name}`, TEAMS[q.team].cls);
+          break;
+        }
+      }
+    }
+  }
+  // bodies pile up instead of passing through each other
+  for (let i = 0; i < ragList.length; i++) for (let j = i + 1; j < ragList.length; j++) {
+    const a = ragList[i], b = ragList[j];
+    const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, d = Math.hypot(dx, dz);
+    if (d > 0.6 || d < 1e-5) continue;
+    const push = (0.6 - d) / 2, nx = dx / d * push, nz = dz / d * push;
+    for (let k = 0; k < RAG_N * 3; k += 3) {
+      // shift position and history together, so separating doesn't fling them
+      a.rag.pos[k] -= nx; a.rag.pos[k + 2] -= nz; b.rag.pos[k] += nx; b.rag.pos[k + 2] += nz;
+      a.rag.prev[k] -= nx * 0.8; a.rag.prev[k + 2] -= nz * 0.8; b.rag.prev[k] += nx * 0.8; b.rag.prev[k + 2] += nz * 0.8;
+    }
+  }
+}
+function ragBall() {
+  if (ball.owner) return;
+  const B = ball.pos, V = ball.vel;
+  for (const p of players) {
+    if (!p.rag.on || p.sink > 0.2) continue;
+    if ((B.x - p.pos.x) ** 2 + (B.z - p.pos.z) ** 2 > 3.5 || B.y > 2.2) continue;
+    const P = p.rag.pos, Q = p.rag.prev;
+    for (let i = 0; i < RAG_N; i++) {
+      if (!ragOn(p, i)) continue;
+      const k = i * 3, R = RAG_R[i] + BALL_R;
+      const dx = B.x - P[k], dy = B.y - P[k + 1], dz = B.z - P[k + 2], d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > R * R) continue;
+      const d = Math.sqrt(d2) || 1e-5, nx = dx / d, ny = dy / d, nz = dz / d;
+      const spd = V.length();
+      if (p.state === 'down' && spd > 15 && ball.lastTeam >= 0 && ball.lastTeam !== p.team && !ball.ignore.has(p)) { ballHit(p, spd); return; }
+      B.set(P[k] + nx * R, Math.max(BALL_R, P[k + 1] + ny * R), P[k + 2] + nz * R);
+      const vn = V.x * nx + V.y * ny + V.z * nz;
+      if (vn >= 0) return;
+      V.x -= 1.45 * vn * nx; V.y -= 1.45 * vn * ny; V.z -= 1.45 * vn * nz;
+      // the body gets shoved a little the other way
+      Q[k] += vn * nx * 0.25 * STEP; Q[k + 1] += vn * ny * 0.25 * STEP; Q[k + 2] += vn * nz * 0.25 * STEP;
+      audio.thunk();
+      // a hard throw into a corpse can knock bits off it
+      if (p.state === 'dead' && game.gore && spd > 18 && i >= 4 && Math.random() < 0.5) {
+        const part = RAG_PART[i];
+        severPart(p, part, -nx, -nz, spd * 0.4);
+        if (part === 'head') p.m.stumps.head.visible = true;
+        feed(`${part === 'head' ? 'HEAD' : LIMB_NAMES[part]} SHOT OFF THE CORPSE`, 'blood');
+        audio.splat(0.8);
+      }
+      return;
+    }
+  }
+}
+// diving onto a corpse: it moves, and bits may come off
+function corpseHit(a, v) {
+  const dx = v.pos.x - a.pos.x, dz = v.pos.z - a.pos.z, l = Math.hypot(dx, dz) || 1;
+  ragImpulse(v, dx / l, dz / l, 9, 0.4);
+  a.vel.multiplyScalar(0.5);
+  audio.crunch(0.5);
+  if (!game.gore || v.exploded) return;
+  emitBlood(v.pos.x, 0.5, v.pos.z, dx / l, dz / l, 40, 4, 2);
+  const opts = ['head', 'armL', 'armR', 'legL', 'legR'].filter(k => v.limbs[k]);
+  if (opts.length && Math.random() < 0.45) {
+    const k = opts[Math.floor(Math.random() * opts.length)];
+    severPart(v, k, dx / l, dz / l, 8);
+    if (k === 'head') v.m.stumps.head.visible = true;
+    feed(`${a.name} TEARS THE ${k === 'head' ? 'HEAD' : LIMB_NAMES[k]} OFF ${v.name}'S CORPSE`, 'blood');
+    audio.splat(1); audio.roar(0.4);
+  }
+}
 
 // ===================================================================
 // Ball
@@ -861,13 +1176,16 @@ function knockDown(v, dx, dz, strength) {
   dropBall(v, dx, dz);
   v.state = 'down'; v.stateT = 0.9 + strength * 0.035; v.fallDir = -1;
   v.yaw = Math.atan2(-dx, -dz);
-  v.vel.set(dx * strength * 0.55, 0, dz * strength * 0.55);
   v.charge = 0;
+  if (v.rag.on) ragImpulse(v, dx, dz, strength);
+  else ragStart(v, dx, dz, strength);
+  v.vel.set(dx * strength * 0.55, 0, dz * strength * 0.55);
 }
 function tint(v) { v.m.armor.color.copy(v.m.armorBase).lerp(BLOOD_TINT, (1 - Math.max(v.health, 0) / 100) * 0.65); }
 
 function severPart(v, key, dx, dz, power) {
   const pivot = v.m.parts[key]; if (!pivot.visible) return;
+  if (v.rag.on) ragPose(v);
   v.m.root.updateMatrixWorld(true);
   const c = PART_CENTER[key], wp = pivot.localToWorld(c.clone());
   pivot.getWorldQuaternion(tmpQ);
@@ -908,6 +1226,13 @@ function applyDamage(v, dmg, dx, dz, byTeam) {
   else audio.vox(v, 'oof');
 }
 function kill(v, dx, dz, dmg, byTeam) {
+  killBody(v, dx, dz, dmg, byTeam);
+  // whatever is left goes limp and flies with the hit
+  const st = 6 + Math.min(dmg, 60) * 0.15;
+  if (v.exploded) ragEnd(v);
+  else if (v.rag.on) ragImpulse(v, dx, dz, st, 0.35); else ragStart(v, dx, dz, st);
+}
+function killBody(v, dx, dz, dmg, byTeam) {
   dropBall(v, dx, dz);
   v.state = 'dead'; v.stateT = 0; v.fallDir = -1; v.health = 0; v.bleedT = 6;
   v.yaw = Math.atan2(-dx, -dz); v.vel.set(dx * 7, 0, dz * 7);
@@ -946,7 +1271,9 @@ function tackleHit(a, v) {
     audio.zap(0.8); audio.vox(a, 'oof'); feed(`${a.name} BOUNCES OFF ${v.name}'S SHIELD`, TEAMS[v.team].cls);
     knockDown(a, -nx, -nz, 9); return;
   }
-  const dmg = (5 + impact * 1.6 + rand(0, 11)) * (a.fx.frenzy > 0 ? 1.7 : 1);
+  const pound = v.state === 'down';
+  const dmg = (5 + impact * 1.6 + rand(0, 11)) * (a.fx.frenzy > 0 ? 1.7 : 1) * (pound ? 1.3 : 1);
+  if (pound) feed(`GROUND AND POUND · ${a.name} ON ${v.name}`, TEAMS[a.team].cls);
   a.vel.multiplyScalar(0.35);
   audio.vox(a, 'effort');
   applyDamage(v, dmg, nx, nz, a.team);
@@ -1171,6 +1498,13 @@ function aiStep(p, dt, ctx) {
   const owner = ball.owner;
   if (owner === p) return carrierAI(p, dt, decide);
   if (ctx.seekers[p.team] === p) { const t = avoidPads(p, token.pos); return arrive(p, t.x, t.z, dt); }
+  // put the boot in: dive onto an opponent who is already down
+  if (decide && p.diveCD <= 0 && ctx.chasers[p.team] !== p) {
+    for (const o of players) {
+      if (o.team === p.team || o.state !== 'down' || !o.rag.on) continue;
+      if (o.pos.distanceTo(p.pos) < 2.4 && Math.random() < (p.team === 1 ? DIFF.dive * 0.6 : 0.2)) { startDive(p, o.pos.x - p.pos.x, o.pos.z - p.pos.z); return; }
+    }
+  }
   let tgt;
   if (owner && owner.team === p.team) tgt = formation(p, true);
   else if (owner) {
@@ -1191,7 +1525,7 @@ function aiStep(p, dt, ctx) {
 // Physics
 // ===================================================================
 function stepPlayer(p, dt) {
-  p.diveCD -= dt; p.throwAnim -= dt;
+  p.diveCD -= dt; p.throwAnim -= dt; p.slamCD -= dt; p.warpCD -= dt; p.tripCD -= dt;
   const damp = k => { const f = Math.exp(-k * dt); p.vel.x *= f; p.vel.z *= f; };
   switch (p.state) {
     case 'run': {
@@ -1206,13 +1540,23 @@ function stepPlayer(p, dt) {
     case 'dive':
       p.stateT -= dt; damp(1.2);
       for (const o of players) {
-        if (o.team === p.team || p.hitSet.has(o) || o.state === 'dead' || o.state === 'down') continue;
-        if (o.pos.distanceToSquared(p.pos) < 1.15 * 1.15) { p.hitSet.add(o); tackleHit(p, o); }
+        if (o.team === p.team || p.hitSet.has(o) || o.sink > 0) continue;
+        if (o.state === 'down' && !o.rag.on) continue;
+        if (o.pos.distanceToSquared(p.pos) > 1.15 * 1.15) continue;
+        p.hitSet.add(o);
+        if (o.state === 'dead') { if (o.rag.on) corpseHit(p, o); } else tackleHit(p, o);
       }
       if (p.stateT <= 0) { p.state = 'down'; p.stateT = 0.45; if (!p.hitSet.size && Math.random() < 0.6) audio.vox(p, 'oof'); }
       break;
     case 'down':
-      p.stateT -= dt; damp(4);
+      p.stateT -= dt;
+      if (p.rag.on) {
+        ragStep(p, dt);
+        // up once the body has stopped moving (or has lain there long enough)
+        if (p.stateT <= 0 && (p.rag.speed < 1.5 || p.stateT < -1.5)) { ragGetUp(p); p.state = 'getup'; p.stateT = 0.35; }
+        break;
+      }
+      damp(4);
       if (p.stateT <= 0) { p.state = 'getup'; p.stateT = 0.35; }
       break;
     case 'getup':
@@ -1220,11 +1564,16 @@ function stepPlayer(p, dt) {
       if (p.stateT <= 0) p.state = 'run';
       break;
     case 'dead':
-      p.stateT += dt; damp(3.5);
+      p.stateT += dt;
+      if (p.rag.on) ragStep(p, dt); else damp(3.5);
       if (p.stateT > 3) p.sink = Math.min(2.5, (p.stateT - 3) * 1.6);
       if (p.stateT > 7) { p.restore(); p.homeSpot(p.pos); p.pos.x = p.pos.x < 0 ? -HW + 2 : HW - 2; p.pos.z = HL * p.side * 0.85; p.state = 'run'; p.fall = 0; p.vel.set(0, 0, 0); feed(`${p.name} SUBBED IN`, TEAMS[p.team].cls); }
       break;
   }
+  if (!p.rag.on) bodyMove(p, dt);
+  bleed(p, dt);
+}
+function bodyMove(p, dt) {
   p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt;
   const lim = HW - 0.4, limz = HL - 0.4;
   if (Math.abs(p.pos.x) > lim) {
@@ -1237,6 +1586,8 @@ function stepPlayer(p, dt) {
     if ((p.state === 'down' || p.state === 'dead') && sp > 5) wallSlam(p, sp, 0, Math.sign(p.pos.z));
     p.pos.z = Math.sign(p.pos.z) * limz; p.vel.z *= -0.3;
   }
+}
+function bleed(p, dt) {
   if (p.bleedT > 0 && game.gore) {
     p.bleedT -= dt;
     if (Math.random() < 0.55) {
@@ -1274,6 +1625,7 @@ function stepBall(dt) {
     if (!toyWall(s, p, v)) { p.x = s * (HW - BALL_R); v.x *= -0.75; audio.bounce(Math.abs(v.x) / 15); }
   }
   bumperBall();
+  ragBall();
   const inMouth = Math.abs(p.x) < GOAL_HW - BALL_R && p.y < GOAL_H - BALL_R;
   if (Math.abs(p.z) > HL - BALL_R) {
     const s = Math.sign(p.z);
@@ -1364,7 +1716,7 @@ function bumperBall() {
 }
 function bumperPlayers() {
   for (const p of players) {
-    if (p.sink > 0.5) continue;
+    if (p.sink > 0.5 || p.rag.on) continue;
     for (const b of bumpers) {
       const dx = p.pos.x - b.x, dz = p.pos.z - b.z, d = Math.hypot(dx, dz), R = BUMPER_R + 0.4;
       if (d >= R || d < 1e-4) continue;
@@ -1477,12 +1829,20 @@ function stepPads(dt) {
     pad.on = on;
     if (!on) continue;
     for (const p of players) {
-      if (p.state === 'dead' || p.sink > 0) continue;
+      if (p.sink > 0 || (p.state === 'dead' && !p.rag.on)) continue;
       if (Math.abs(p.pos.x) > PAD_HALF || Math.abs(p.pos.z - pad.z) > PAD_HALF) continue;
       p.shockT -= dt;
       if (p.shockT > 0) continue;
       p.shockT = 0.45;
       audio.zap(0.6);
+      if (p.state === 'dead') {
+        // the current still goes through a corpse: it jerks and smokes
+        const a = rand(0, 6.283); ragImpulse(p, Math.sin(a), Math.cos(a), 4, 0.9);
+        p.m.armor.color.multiplyScalar(0.85);
+        if (game.gore) emitBlood(p.pos.x, 0.4, p.pos.z, 0, 0, 12, 2.5, 1.5);
+        if (!p.cooked) { p.cooked = true; feed(`${p.name}'S BODY IS COOKING`, 'blood'); }
+        continue;
+      }
       if (p.fx.shield > 0) continue;
       const a = rand(0, 6.283), first = p.health > 0 && !p.fried;
       p.fried = true;
@@ -1692,6 +2052,7 @@ function step(dt) {
   }
   if (game.state !== 'kickoff' && game.state !== 'menu') for (const p of players) stepPlayer(p, dt);
   separate();
+  ragWorld();
   stepBall(dt);
   if (active) ballContacts();
   toysStep(dt, active);
@@ -1730,8 +2091,9 @@ function updateCamera(dt) {
 }
 function animatePlayer(p, dt) {
   const m = p.m;
-  m.root.position.set(p.pos.x, -p.sink, p.pos.z);
   m.root.visible = p.sink < 2.4;
+  if (p.rag.on) { ragPose(p); hbUpdate(p); return; }
+  m.root.position.set(p.pos.x, -p.sink, p.pos.z);
   m.yaw.rotation.y = p.yaw;
   let target = 0;
   if (p.state === 'dive') target = 1.35;
@@ -1755,6 +2117,10 @@ function animatePlayer(p, dt) {
     P.armL.rotation.x = -0.4; P.armR.rotation.x = 0.5; P.armL.rotation.z = -0.9; P.armR.rotation.z = 0.9;
     P.legL.rotation.x = 0.25; P.legR.rotation.x = -0.25;
   }
+  hbUpdate(p);
+}
+function hbUpdate(p) {
+  const m = p.m;
   m.hb.visible = p.state !== 'dead' && game.state !== 'menu';
   m.hb.quaternion.copy(camera.quaternion);
   m.fill.scale.x = Math.max(0.001, p.health / 100);
@@ -1884,7 +2250,7 @@ renderer.domElement.addEventListener('pointerdown', () => { if (game.state === '
 }
 
 // expose a tiny hook for automated tests
-window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused };
+window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused, knockDown, kill };
 })();
 </script>
 </body>
