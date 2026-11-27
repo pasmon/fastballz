@@ -113,6 +113,55 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 .bar i { display: block; height: 100%; background: var(--ember); }
 .squad.a .bar i { background: var(--warden); } .squad.h .bar i { background: var(--hound); }
 .sheet .note { margin: 0; font-size: 12px; color: var(--dim); letter-spacing: 0.06em; }
+/* main menu modes */
+.modes { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.go.alt { background: transparent; color: var(--ember); box-shadow: inset 0 0 0 2px var(--ember); }
+.go.alt:hover { background: rgba(255, 122, 26, 0.15); }
+.career { margin: 0; font-size: 12px; letter-spacing: 0.1em; color: var(--dim); }
+.link { pointer-events: auto; background: none; border: 0; padding: 0 2px; font: inherit; color: var(--ember); text-decoration: underline; cursor: pointer; letter-spacing: inherit; }
+.link:focus-visible { outline: 2px solid var(--ash); outline-offset: 2px; }
+/* league hub and match report: tall on phones, so they scroll from the top */
+#hubView, #reportView { place-items: safe center; background: rgba(11, 9, 7, 0.95); }
+.hub { max-width: 760px; }
+.tabs { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.hubbody { display: grid; gap: 12px; text-align: left; }
+.hubbody .scroll { overflow-x: auto; }
+.hubbody table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hubbody th { font-weight: 700; font-size: 10px; letter-spacing: 0.14em; color: var(--dim); text-align: left; padding: 2px 4px; }
+.hubbody td { padding: 5px 4px; border-top: 1px solid rgba(255, 122, 26, 0.16); white-space: nowrap; }
+.hubbody td.nm { font-weight: 700; letter-spacing: 0.08em; }
+.hubbody td.nm small { display: block; font-weight: 500; color: var(--dim); font-size: 10px; letter-spacing: 0.1em; }
+.hubbody td.nm small.hurt { color: #ff6a5a; }
+.hubbody tr.me td { background: rgba(224, 57, 44, 0.12); }
+.hubbody td.pts { font-weight: 700; color: var(--ember); }
+.hubbody .note { margin: 0; font-size: 12px; color: var(--dim); letter-spacing: 0.06em; }
+.nextfx, .hubbody .fixture { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.1em; text-align: center; }
+.nextfx small, .hubbody .fixture small { display: block; font-size: 11px; color: var(--dim); letter-spacing: 0.16em; margin-top: 2px; }
+.hubbody .fixture { font-size: 22px; }
+table.sq tr { cursor: pointer; }
+table.sq tr.bench td { color: var(--dim); }
+table.sq tr.bench td.nm { color: var(--ash); }
+table.sq tr.sel td { background: rgba(255, 122, 26, 0.22); }
+table.sq tr:focus-visible { outline: 2px solid var(--ash); outline-offset: -2px; }
+table.sq td.stc { min-width: 58px; }
+.plus { pointer-events: auto; margin-left: 4px; width: 22px; height: 22px; padding: 0; font: 700 14px var(--ui); color: #120b06; background: var(--ember); border: 0; cursor: pointer; vertical-align: middle; }
+.plus:focus-visible { outline: 2px solid var(--ash); outline-offset: 1px; }
+b.pts { color: var(--ember); }
+.news { display: grid; gap: 4px; }
+.news h3 { margin: 4px 0 2px; font-size: 11px; letter-spacing: 0.2em; color: var(--dim); }
+.news p { margin: 0; font-size: 13px; letter-spacing: 0.03em; line-height: 1.35; }
+.news p.hd { font-weight: 700; letter-spacing: 0.16em; color: var(--ember); margin-top: 6px; font-size: 12px; }
+.news p.res { color: var(--ash); }
+.news p.dead { color: #ff6a5a; }
+.news p.dead.mine { color: #ff3a2a; font-weight: 700; }
+.news p.dead small { font-weight: 500; color: var(--dim); }
+.news p.wound { color: #e0a070; }
+.news p.join { color: #9fd18a; }
+.news p b { letter-spacing: 0.08em; }
+.lvup { color: #f2d45a; font-weight: 700; }
+.champ { margin: 0; text-align: center; font-family: var(--display); font-size: 28px; letter-spacing: 0.04em; }
+.tn { font-weight: 700; }
+#hubTabs .dbtn { min-width: 92px; }
 @media (prefers-reduced-motion: reduce) { .msg { animation-duration: 2.4s; } }
 </style>
 </head>
@@ -120,9 +169,9 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 <div id="game"></div>
 <div id="hud">
   <div id="scorebar">
-    <div class="tm home"><span>HOUNDS</span><span id="s0" class="pts">0</span></div>
+    <div class="tm home"><span id="n0">HOUNDS</span><span id="s0" class="pts">0</span></div>
     <div class="clock"><span id="half">1ST HALF</span><span id="time">1:30</span></div>
-    <div class="tm away"><span id="s1" class="pts">0</span><span>WARDENS</span></div>
+    <div class="tm away"><span id="s1" class="pts">0</span><span id="n1">WARDENS</span></div>
   </div>
   <div id="feed"></div>
   <div id="banner"></div>
@@ -146,18 +195,42 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
 </div>
 <div id="sheetView" class="overlay" hidden>
   <div class="panel sheet">
-    <h1 class="mid">TEAM SHEET</h1>
+    <h1 class="mid" id="sheetTitle">TEAM SHEET</h1>
+    <p class="fixture" id="sheetFx" hidden></p>
     <div class="squads"><div class="squad h" id="sq0"></div><div class="squad a" id="sq1"></div></div>
+    <p class="note" id="sheetBench" hidden></p>
     <p class="note">SPD speed · POW throws and hits · TGH damage taken and stamina · ACC aim · AGG how eagerly they dive in. Heavier players hit harder and get thrown less.</p>
     <button id="kickBtn" class="go" type="button">KICK OFF</button>
-    <div class="toggles">Press <b>Enter</b> to kick off · new line-ups every match</div>
+    <div class="toggles" id="sheetHint">Press <b>Enter</b> to kick off · new line-ups every match</div>
+  </div>
+</div>
+<div id="hubView" class="overlay" hidden>
+  <div class="panel hub">
+    <h1 class="mid" id="hubTitle">SEASON</h1>
+    <p class="sub" id="hubSub"></p>
+    <div class="tabs" id="hubTabs" role="group" aria-label="League screens">
+      <button type="button" class="dbtn" data-tab="table">TABLE</button>
+      <button type="button" class="dbtn" data-tab="squad">SQUAD</button>
+      <button type="button" class="dbtn" data-tab="fallen">THE FALLEN</button>
+    </div>
+    <div id="hubBody" class="hubbody"></div>
+    <button id="hubPlay" class="go" type="button">PLAY</button>
+    <div class="toggles">Press <b>Enter</b> to play · <button type="button" id="hubMenu" class="link">MAIN MENU</button></div>
+  </div>
+</div>
+<div id="reportView" class="overlay" hidden>
+  <div class="panel hub">
+    <h1 class="mid" id="repTitle">FULL TIME</h1>
+    <div id="repBody" class="hubbody"></div>
+    <button id="repGo" class="go" type="button">CONTINUE</button>
+    <div class="toggles">Press <b>Enter</b> to continue</div>
   </div>
 </div>
 <div id="menu" class="overlay">
   <div class="panel">
     <h1>IRONBALL</h1>
     <p class="sub">Vulcan League · Season 2189 · Smelting Pit 7</p>
-    <p class="fixture"><span class="h">CRIMSON HOUNDS</span> vs <span class="a">COBALT WARDENS</span></p>
+    <p class="fixture"><span class="h">CRIMSON HOUNDS</span> vs the league</p>
     <dl class="controls">
       <dt><kbd>WASD</kbd> <kbd>↑↓←→</kbd></dt><dd>Run. You control the red player with the yellow arrow and ring.</dd>
       <dt><kbd>Space</kbd></dt><dd>With the ball: pass. Without: dive tackle.</dd>
@@ -166,29 +239,35 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 7p
       <dt>Arena</dt><dd>Hit bumpers and wall stars with the ball for points. The teal slot warps the ball across. Floor grids electrocute. Grab glowing tokens.</dd>
       <dt>Players</dt><dd>Each player has speed, power, toughness, accuracy and aggression, and a real weight. Running flat out drains stamina: tired players are slower and fall harder.</dd>
       <dt>Bodies</dt><dd>Downed players go limp and fly with the hit. Dive on them while they are down. Corpses stay on the floor until they sink, so watch your feet.</dd>
+      <dt>League</dt><dd>Five rounds against five rival teams. Your eight players keep their wounds and their experience from match to match. Lost limbs never grow back, and the dead stay dead.</dd>
       <dt><kbd>P</kbd> <kbd>G</kbd> <kbd>M</kbd></dt><dd>Pause. Gore on or off. Sound on or off.</dd>
     </dl>
     <p class="rules">Goal 10 · Kill 10 · Bumper 2 · Wall star 2 · Star sweep 10 · Two 90-second halves · No fouls</p>
-    <p id="loadError" class="err" hidden>The 3D engine file (vendor/three.min.js) did not load. Keep the vendor folder next to index.html and reload.</p>
-    <button id="startBtn" class="go" type="button">START MATCH</button>
+    <p id="loadError" class="err" hidden>A game file (vendor/three.min.js or league.js) did not load. Keep the vendor folder and league.js next to index.html and reload.</p>
+    <div class="modes">
+      <button id="leagueBtn" class="go" type="button">LEAGUE</button>
+      <button id="startBtn" class="go alt" type="button">QUICK MATCH</button>
+    </div>
+    <p class="career" id="careerLine" hidden><span id="careerInfo"></span> <button type="button" id="wipeBtn" class="link">NEW CAREER</button></p>
     <div class="diff" role="group" aria-label="Difficulty">
       <button type="button" class="dbtn" data-diff="easy">EASY</button>
       <button type="button" class="dbtn" data-diff="normal">NORMAL</button>
       <button type="button" class="dbtn" data-diff="hard">HARD</button>
     </div>
-    <div class="toggles">Press <b>Enter</b> to start · <b>1 2 3</b> difficulty · Gore <b id="goreState">ON</b></div>
+    <div class="toggles">Press <b>Enter</b> for the league · <b>Q</b> quick match · <b>1 2 3</b> difficulty · Gore <b id="goreState">ON</b></div>
   </div>
 </div>
 
 <!-- Three.js r160 is bundled in vendor/ so the game runs offline and by opening this file directly. -->
 <script src="vendor/three.min.js"></script>
+<script src="league.js"></script>
 <script>
 (() => {
 'use strict';
-const THREE = window.THREE;
-if (!THREE) {
+const THREE = window.THREE, League = window.IronLeague;
+if (!THREE || !League) {
   const m = document.getElementById('loadError'); m.hidden = false;
-  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startBtn').disabled = true; document.getElementById('leagueBtn').disabled = true;
   return;
 }
 
@@ -201,26 +280,17 @@ const G = 20;                      // gravity, a bit heavier than Earth for snap
 const BALL_R = 0.22;
 const STEP = 1 / 120;
 const MATCH_HALF = 90;
-const TEAMS = [
-  { name: 'CRIMSON HOUNDS', short: 'HOUNDS', color: 0xb8231a, trim: 0xffb347, visor: 0xff5a1f, cls: 'hound' },
-  { name: 'COBALT WARDENS', short: 'WARDENS', color: 0x2452c4, trim: 0xd9e4ff, visor: 0x4fd2ff, cls: 'warden' },
-];
-const ROLES = ['GK', 'DL', 'DR', 'FL', 'FR'];
-// Old-school Finnish first names. Each match draws ten different ones for the two line-ups.
-const NAME_POOL = ['Jorma', 'Erkki', 'Pertti', 'Seppo', 'Kalevi', 'Raimo', 'Tauno', 'Veikko', 'Reijo', 'Pentti',
-  'Arvo', 'Eino', 'Toivo', 'Urho', 'Onni', 'Väinö', 'Aarne', 'Esko', 'Martti', 'Olavi', 'Paavo', 'Rauno', 'Sulo',
-  'Taisto', 'Unto', 'Viljo', 'Yrjö', 'Heikki', 'Kauko', 'Matti', 'Oiva', 'Pekka', 'Risto', 'Tapio', 'Uuno',
-  'Voitto', 'Aimo', 'Hannes', 'Jaakko', 'Keijo', 'Mauno', 'Niilo', 'Reino', 'Sakari', 'Teuvo', 'Veli', 'Lauri',
-  'Ensio', 'Aulis', 'Topi', 'Vilho', 'Kustaa', 'Allan', 'Leevi', 'Eero', 'Ilmari'];
+// The two sides on the pitch. Slot 0 is always your Crimson Hounds; slot 1 takes the look of whoever you play.
+const teamLook = (def, cls) => ({ name: def.name, short: def.short, color: def.color, trim: def.trim, visor: def.visor, css: def.css, cls });
+const TEAMS = [teamLook(League.TEAM_DEFS[0], 'hound'), teamLook(League.TEAM_DEFS[1], 'warden')];
+const ROLES = League.SLOTS;
+// Old-school Finnish first names (the pool lives in league.js). Each quick match draws ten different ones.
+const NAME_POOL = League.NAME_POOL;
 
 const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
 // Player stats (v0.3), 1-10. Roles have archetypes, every match rolls a spread around them.
-const STATS = ['spd', 'pow', 'tgh', 'acc', 'agg'];
-const ARCHETYPES = {
-  GK: { spd: 4, pow: 6, tgh: 8, acc: 6, agg: 4, size: 1.12, label: 'KEEPER' },
-  D:  { spd: 5, pow: 8, tgh: 7, acc: 4, agg: 7, size: 1.09, label: 'DEFENDER' },
-  F:  { spd: 8, pow: 5, tgh: 4, acc: 7, agg: 5, size: 0.92, label: 'FORWARD' },
-};
+// Player stats (v0.3), 1-10. Roles have archetypes; quick matches roll a spread around them.
+const STATS = League.STATS, ARCHETYPES = League.ARCHETYPES;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
 
@@ -233,7 +303,9 @@ const DIFFS = {
 let diffKey = 'easy';
 try { const v = localStorage.getItem('ironball.diff'); if (v && DIFFS[v]) diffKey = v; } catch (e) { /* storage unavailable */ }
 let DIFF = DIFFS[diffKey];
-const game = { paused: false, state: 'menu', stateT: 0, half: 1, time: MATCH_HALF, score: [0, 0], gore: true, shake: 0, hitstop: 0 };
+const game = { paused: false, state: 'menu', stateT: 0, half: 1, time: MATCH_HALF, score: [0, 0], gore: true, shake: 0, hitstop: 0, clock: 0 };
+// League mode (v0.4): the career, this fixture, both benches and what happened to whom
+const league = { on: false, c: null, fx: null, bench: [[], []], stats: {}, played: new Set(), deaths: [], kos: [], limbs: [], report: null };
 
 // ===================================================================
 // Renderer, scene, camera
@@ -751,7 +823,7 @@ function buildModel(team) {
   const sfill = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({ color: 0xf2d45a, depthWrite: false })); sfill.position.set(-0.4, -0.085, 0);
   hb.add(bg, fill, sbg, sfill); root.add(hb);
   scene.add(root);
-  return { root, yaw, body, parts, stumps, rest, hb, fill, sfill, armor, armorBase: new THREE.Color(T.color) };
+  return { root, yaw, body, parts, stumps, rest, hb, fill, sfill, armor, trim, visor, armorBase: new THREE.Color(T.color) };
 }
 
 class Player {
@@ -771,6 +843,7 @@ class Player {
     this.rag = { on: false, pos: new Float32Array(27), prev: new Float32Array(27), speed: 0, smear: 0, pool: 0 };
     this.slamCD = 0; this.warpCD = 0; this.tripCD = 0; this.cooked = false;
     this.base = { spd: 5, pow: 5, tgh: 5, acc: 5, agg: 5 }; this.size = 1; this.mass = 1; this.sta = 1;
+    this.who = null; this.gone = false; this.lastHit = { by: null, t: -99, how: '' };   // league player in this slot, empty slot, who hit us last
   }
   get keeper() { return this.role === 'GK'; }
   get arch() { return ARCHETYPES[this.keeper ? 'GK' : this.role[0]]; }
@@ -824,6 +897,17 @@ class Player {
     for (const k in this.limbs) { this.limbs[k] = 1; this.m.parts[k].visible = true; this.m.stumps[k].visible = false; }
     this.m.parts.torso.visible = true;
     this.m.armor.color.copy(this.m.armorBase);
+    this.lastHit.by = null; this.lastHit.t = -99;
+    // league players keep their wounds: a lost limb stays lost
+    if (this.who) for (const k of ['armL', 'armR', 'legL', 'legR']) if (!this.who.limbs[k]) { this.limbs[k] = 0; this.m.parts[k].visible = false; this.m.stumps[k].visible = true; }
+  }
+  // put a league player into this slot (null = quick-match player)
+  setPerson(w) {
+    this.who = w; this.gone = !w;
+    if (!w) return;
+    this.name = w.name; Object.assign(this.base, w.base); this.size = w.size; this.mass = w.size ** 3;
+    league.played.add(w.id);
+    if (!league.stats[w.id]) league.stats[w.id] = { g: 0, k: 0, ko: 0, toy: 0 };
   }
 }
 
@@ -832,7 +916,17 @@ for (let t = 0; t < 2; t++) for (let i = 0; i < 5; i++) players.push(new Player(
 function rollSquads() {
   const pool = NAME_POOL.slice();
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  players.forEach((p, i) => { p.roll(); p.name = pool[i]; });
+  players.forEach((p, i) => { p.who = null; p.gone = false; p.roll(); p.name = pool[i]; });
+}
+// Give slot 1 the look of another team (and the HUD its colour)
+function setTeamLook(slot, def) {
+  Object.assign(TEAMS[slot], teamLook(def, TEAMS[slot].cls));
+  for (const p of players) if (p.team === slot) {
+    p.m.armorBase.setHex(def.color); p.m.armor.color.copy(p.m.armorBase);
+    p.m.trim.color.setHex(def.trim); p.m.visor.emissive.setHex(def.visor);
+  }
+  document.documentElement.style.setProperty(slot === 0 ? '--hound' : '--warden', def.css);
+  $('n' + slot).textContent = def.short;
 }
 rollSquads();
 const keeperOf = t => players.find(p => p.team === t && p.keeper);
@@ -1286,7 +1380,10 @@ function severPart(v, key, dx, dz, power) {
   clone.traverse(o => { if (o.isMesh && o.material === v.m.armor) { o.material = v.m.armor.clone(); o.material.userData.owned = true; } });
   holder.add(clone);
   pivot.visible = false;
-  if (key in v.limbs) { v.limbs[key] = 0; v.m.stumps[key].visible = true; v.bleedT = Math.max(v.bleedT, 5); v.bleedKey = key; }
+  if (key in v.limbs) {
+    v.limbs[key] = 0; v.m.stumps[key].visible = true; v.bleedT = Math.max(v.bleedT, 5); v.bleedKey = key;
+    if (v.who && key !== 'head' && v.who.limbs[key] && v.state !== 'dead') { v.who.limbs[key] = 0; league.limbs.push({ id: v.who.id, team: v.team, key }); }
+  }
   spawnGib(holder, new THREE.Vector3(dx * power * rand(0.3, 0.8) + rand(-2, 2), rand(3, 8), dz * power * rand(0.3, 0.8) + rand(-2, 2)), new THREE.Vector3(rand(-14, 14), rand(-14, 14), rand(-14, 14)), 3, key === 'torso' ? 0.18 : 0.12);
   emitBlood(wp.x, wp.y, wp.z, dx, dz, 70, 6, 2.5);
 }
@@ -1331,9 +1428,25 @@ function killBody(v, dx, dz, dmg, byTeam) {
   v.yaw = Math.atan2(-dx, -dz); v.vel.set(dx * 7, 0, dz * 7);
   const scorer = byTeam === v.team || byTeam < 0 ? 1 - v.team : byTeam;
   if (game.state === 'play') game.score[scorer] += 10;
+  const lh = v.lastHit, killer = lh.by && lh.by.team !== v.team && game.clock - lh.t < 6 ? lh.by : null;
+  // League: most lethal hits only knock a player out cold. They are carried off and live to play again.
+  // Bigger hits kill more often, and your own Hounds survive more on the easier settings.
+  const lethal = !v.who || league.report || Math.random() < clamp(0.3 + (dmg > 38 ? 0.25 : 0), 0, 1) * (v.team === 0 ? { easy: 0.6, normal: 0.8, hard: 1 }[diffKey] : 1);
+  if (!lethal) {
+    league.kos.push({ id: v.who.id, team: v.team });
+    if (killer && killer.who && league.stats[killer.who.id]) league.stats[killer.who.id].ko++;
+    audio.crunch(1); audio.roar(0.8); audio.vox(v, 'ko');
+    game.shake = 1.1; game.hitstop = 0.1;
+    if (game.gore) { emitBlood(v.pos.x, 1.1, v.pos.z, dx, dz, 120, 6, 3); addDecal(v.pos.x + dx, v.pos.z + dz, rand(0.4, 0.7)); }
+    feed(`${v.name} OUT COLD · CARRIED OFF · +10 ${TEAMS[scorer].short}`, TEAMS[scorer].cls);
+    return;
+  }
+  const death = v.who && !league.report ? { id: v.who.id, team: v.team, killer: killer ? killer.name : null, killerTeam: killer ? killer.team : 1 - v.team, how: game.clock - lh.t < 6 ? lh.how : '', style: 'dead' } : null;
+  if (death) league.deaths.push(death);
+  if (death && killer && killer.who && league.stats[killer.who.id]) league.stats[killer.who.id].k++;
   audio.splat(1.3); audio.roar(1);
   game.shake = 1.4; game.hitstop = 0.12;
-  if (!game.gore) { audio.vox(v, 'ko'); feed(`${v.name} KNOCKED OUT · +10 ${TEAMS[scorer].short}`, TEAMS[scorer].cls); return; }
+  if (!game.gore) { if (death) death.style = 'ko'; audio.vox(v, 'ko'); feed(`${v.name} KNOCKED OUT · +10 ${TEAMS[scorer].short}`, TEAMS[scorer].cls); return; }
   emitBlood(v.pos.x, 1.1, v.pos.z, dx, dz, 260, 8, 4);
   for (let k = 0; k < 6; k++) addDecal(v.pos.x + rand(-1, 1) + dx, v.pos.z + rand(-1, 1) + dz, rand(0.4, 0.9));
   const r = Math.random();
@@ -1343,11 +1456,13 @@ function killBody(v, dx, dz, dmg, byTeam) {
     for (const k in v.m.stumps) v.m.stumps[k].visible = false;
     spawnChunks(v.pos.x, 1.1, v.pos.z, 12, tmpV.set(dx, 0, dz), 9);
     audio.vox(v, 'death', 0.16);   // barely gets started
+    if (death) death.style = 'paste';
     feed(`${v.name} IS PASTE · +10 ${TEAMS[scorer].short}`, 'blood');
   } else if (r < 0.65) {
     severPart(v, 'head', dx, dz, 9);
     v.m.stumps.head.visible = true;
     audio.vox(v, 'death', 0.3);    // the head leaves mid-scream
+    if (death) death.style = 'decap';
     feed(`DECAPITATED · ${v.name} · +10 ${TEAMS[scorer].short}`, 'blood');
   } else {
     audio.vox(v, 'death');
@@ -1365,6 +1480,7 @@ function tackleHit(a, v) {
     knockDown(a, -nx, -nz, 9); return;
   }
   const pound = v.state === 'down';
+  v.lastHit.by = a; v.lastHit.t = game.clock; v.lastHit.how = pound ? 'pound' : 'tackle';
   // momentum: a heavy hitter flattens a light runner, a light one bounces off a heavy one
   const ratio = a.mass / v.mass, fling = clamp(ratio, 0.55, 1.9);
   const dmg = (5 + impact * 1.6 + rand(0, 11)) * (a.fx.frenzy > 0 ? 1.7 : 1) * (pound ? 1.3 : 1) * (0.75 + 0.05 * a.stat('pow')) * Math.sqrt(ratio);
@@ -1378,11 +1494,13 @@ function ballHit(v, spd) {
   const dmg = (spd - 13) * 1.7 + rand(0, 6);
   ball.vel.x *= -0.25; ball.vel.z *= -0.25; ball.vel.y = Math.abs(ball.vel.y) * 0.3 + 2;
   ball.ignore.add(v);
+  if (ball.lastThrower && ball.lastTeam >= 0) { v.lastHit.by = ball.lastThrower; v.lastHit.t = game.clock; v.lastHit.how = 'throw'; }
   applyDamage(v, dmg, dx, dz, ball.lastTeam);
 }
 function wallSlam(p, speed, nx, nz) {
   const dmg = (speed - 5) * 3 * (1.25 - 0.05 * p.stat('tgh'));
   if (dmg <= 2 || p.state === 'dead') return;
+  p.lastHit.how = 'wall';
   p.health -= dmg; tint(p);
   emitBlood(p.pos.x, 0.9, p.pos.z, nx, nz, dmg * 4, 3, 2);
   audio.crunch(0.6);
@@ -1665,11 +1783,23 @@ function stepPlayer(p, dt) {
       p.stateT += dt;
       if (p.rag.on) ragStep(p, dt); else damp(3.5);
       if (p.stateT > 3) p.sink = Math.min(2.5, (p.stateT - 3) * 1.6);
-      if (p.stateT > 7) { p.restore(); p.homeSpot(p.pos); p.pos.x = p.pos.x < 0 ? -HW + 2 : HW - 2; p.pos.z = HL * p.side * 0.85; p.state = 'run'; p.fall = 0; p.vel.set(0, 0, 0); feed(`${p.name} SUBBED IN`, TEAMS[p.team].cls); }
+      if (p.stateT > 7 && !p.gone && game.state !== 'full') subIn(p);
       break;
   }
   if (!p.rag.on) bodyMove(p, dt);
   bleed(p, dt);
+}
+function subIn(p) {
+  if (league.on) {
+    // the dead stay dead: the best fit from the bench comes on, or the team plays a man down
+    const bench = league.bench[p.team];
+    if (!bench.length) { p.setPerson(null); p.gone = true; ragEnd(p); p.sink = 2.5; feed(`${TEAMS[p.team].short} PLAY A MAN DOWN`, TEAMS[p.team].cls); return; }
+    const want = p.keeper ? 'GK' : p.role[0];
+    bench.sort((a, b) => (b.pos === want) - (a.pos === want) || (b.base.tgh + b.base.spd) - (a.base.tgh + a.base.spd));
+    p.setPerson(bench.shift());
+  }
+  p.restore(); p.homeSpot(p.pos); p.pos.x = p.pos.x < 0 ? -HW + 2 : HW - 2; p.pos.z = HL * p.side * 0.85; p.state = 'run'; p.fall = 0; p.vel.set(0, 0, 0);
+  feed(`${p.name} ${league.on ? 'COMES OFF THE BENCH' : 'SUBBED IN'}`, TEAMS[p.team].cls);
 }
 function bodyMove(p, dt) {
   p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt;
@@ -1775,6 +1905,7 @@ Object.assign(audio, {
 function award(team, pts, label) {
   if (game.state !== 'play' || team < 0) return;
   game.score[team] += pts;
+  const by = ball.lastThrower; if (by && by.team === team && by.who && league.stats[by.who.id]) league.stats[by.who.id].toy++;
   feed(`${label} +${pts} ${TEAMS[team].short}`, TEAMS[team].cls);
 }
 
@@ -1944,7 +2075,7 @@ function stepPads(dt) {
       }
       if (p.fx.shield > 0) continue;
       const a = rand(0, 6.283), first = p.health > 0 && !p.fried;
-      p.fried = true;
+      p.fried = true; p.lastHit.how = 'shock';
       applyDamage(p, 9, Math.sin(a), Math.cos(a), -1);
       p.m.armor.color.multiplyScalar(0.8);
       if (first && p.state !== 'dead') feed(`${p.name} GETS FRIED`, 'blood');
@@ -2108,7 +2239,9 @@ function squadTable(team) {
   for (const p of players.filter(q => q.team === team)) {
     const r = t.insertRow();
     const nm = r.insertCell(); nm.className = 'nm'; nm.textContent = p.name.toUpperCase();
-    const sm = document.createElement('small'); sm.textContent = ROLE_NAMES[p.role]; nm.appendChild(sm);
+    const w = p.who, lost = w ? League.wounds(w) : [];
+    const sm = document.createElement('small'); sm.textContent = ROLE_NAMES[p.role] + (w ? ` · LV ${w.lvl}` : '') + (lost.length ? ' · NO ' + lost.map(k => LIMB_NAMES[k]).join(', NO ') : ''); nm.appendChild(sm);
+    if (p.gone) { nm.textContent = 'EMPTY SLOT'; r.className = 'gone'; }
     r.insertCell().textContent = p.kg;
     for (const k of STATS) {
       const c = r.insertCell(), v = Math.round(p.stat(k)), bar = document.createElement('span'), fill = document.createElement('i');
@@ -2120,11 +2253,70 @@ function squadTable(team) {
 let sheetOpen = false;
 function showSheet() {
   audio.init();
-  rollSquads(); squadTable(0); squadTable(1); card.p = null;
+  if (!league.on) {
+    setTeamLook(1, League.TEAM_DEFS[1]); rollSquads();
+    $('sheetTitle').textContent = 'TEAM SHEET'; $('sheetFx').hidden = true; $('sheetBench').hidden = true;
+    $('sheetHint').innerHTML = 'Press <b>Enter</b> to kick off · new line-ups every match';
+  }
+  squadTable(0); squadTable(1); card.p = null;
   hud.menu.hidden = true; $('sheetView').hidden = false; sheetOpen = true;
   $('sheetView').scrollTop = 0; $('kickBtn').focus({ preventScroll: true });
 }
 function kickOff() { if (!sheetOpen) return; sheetOpen = false; $('sheetView').hidden = true; startMatch(); }
+// ---- League mode
+function menuCareer() {
+  const c = League.load(), line = $('careerLine');
+  line.hidden = !c; $('leagueBtn').textContent = c ? 'CONTINUE LEAGUE' : 'NEW LEAGUE';
+  if (c) $('careerInfo').textContent = c.done ? `SEASON ${c.season} OVER` : `SEASON ${c.season} · ROUND ${c.round + 1} OF ${League.ROUNDS}`;
+  $('wipeBtn').textContent = 'NEW CAREER'; wipeArmed = false;
+}
+let wipeArmed = false;
+function wipeCareer() {
+  if (!wipeArmed) { wipeArmed = true; $('wipeBtn').textContent = 'TAP AGAIN TO WIPE YOUR SAVE'; return; }
+  League.wipe(); menuCareer();
+}
+function openLeague() {
+  audio.init();
+  league.c = League.load() || League.newCareer();
+  hud.menu.hidden = true; $('pauseBtn').hidden = true;
+  League.ui.showHub(league.c, 'table');
+}
+function backToMenu() {
+  league.on = false; game.state = 'menu'; banner(''); hud.menu.hidden = false; $('pauseBtn').hidden = true;
+  for (const p of players) { p.who = null; p.gone = false; }
+  setTeamLook(1, League.TEAM_DEFS[1]); menuCareer();
+}
+// Called from the hub: load both squads into the slots and show the fixture sheet
+function leagueSheet(c) {
+  const fx = League.fixture(c); if (!fx) return;
+  league.on = true; league.c = c; league.fx = fx;
+  league.stats = {}; league.played = new Set(); league.deaths = []; league.kos = []; league.limbs = []; league.report = null;
+  setTeamLook(1, League.TEAM_DEFS[fx.opp]);
+  const sq = [League.squadFor(c, 0), League.squadFor(c, fx.opp)];
+  for (const p of players) { p.setPerson(sq[p.team].starters[p.idx]); p.reset(true); if (p.gone) { p.state = 'dead'; p.stateT = 99; p.sink = 2.5; } }
+  league.bench = [sq[0].bench.slice(), sq[1].bench.slice()];
+  $('sheetTitle').textContent = `ROUND ${fx.round + 1}`;
+  const f = $('sheetFx'); f.hidden = false; f.textContent = '';
+  const sp = (t, def) => { const e = document.createElement('span'); e.textContent = t; e.style.color = def.css; return e; };
+  f.append(sp(TEAMS[0].name, League.TEAM_DEFS[0]), fx.homeGame ? ' vs ' : ' at ', sp(TEAMS[1].name, League.TEAM_DEFS[fx.opp]));
+  const b = $('sheetBench'); b.hidden = false;
+  b.textContent = `BENCH: ${league.bench[0].map(q => q.name.toUpperCase()).join(', ') || 'NOBODY. A DEATH MEANS PLAYING A MAN DOWN'} · ${TEAMS[1].short} BENCH: ${league.bench[1].length}`;
+  $('sheetHint').innerHTML = 'Press <b>Enter</b> to kick off · the dead stay dead';
+  showSheet();
+}
+function finishLeagueMatch() {
+  if (league.report || !league.c) return;
+  for (const p of players) if (p.who && p.state !== 'dead') league.played.add(p.who.id);
+  league.report = League.finishMatch(league.c, {
+    fixture: league.fx, score: game.score.slice(), stats: league.stats, played: [...league.played],
+    deaths: league.deaths, kos: league.kos, limbs: league.limbs,
+  });
+}
+function showReport() {
+  if (!league.report) return;
+  $('pauseBtn').hidden = true; banner('');
+  League.ui.showReport(league.c, league.report);
+}
 const card = { el: $('card'), who: $('cardWho'), st: $('cardSt'), sta: $('cardSta'), p: null, tired: null };
 function updateCard() {
   const p = human.p, show = !!p && !human.auto && game.state !== 'menu' && game.state !== 'full';
@@ -2139,17 +2331,18 @@ function updateCard() {
   const tired = p.sta < 0.35; if (tired !== card.tired) { card.tired = tired; card.sta.classList.toggle('tired', tired); }
 }
 function startMatch() {
-  audio.init();
+  audio.init(); game.clock = 0;
   game.score = [0, 0]; game.half = 1; game.time = MATCH_HALF;
   clearDecals(); clearGibs();
   for (let i = 0; i < MAXP; i++) { bp.life[i] = 0; bp.pos[i * 3 + 1] = -50; }
-  for (const p of players) p.reset(true);
+  for (const p of players) { p.reset(true); if (p.gone) { p.state = 'dead'; p.stateT = 99; p.sink = 2.5; } }
   resetToys(true);
   hud.menu.hidden = true; $('pauseBtn').hidden = false;
   setupKickoff();
 }
 function scoreGoal(team) {
   game.score[team] += 10;
+  const sc = ball.lastThrower; if (sc && sc.team === team && sc.who && league.stats[sc.who.id]) league.stats[sc.who.id].g++;
   game.state = 'goal'; game.stateT = 2.8;
   banner('GOAL', `${TEAMS[team].name} +10`);
   audio.roar(1.2); audio.whistle(1); game.shake = 0.8;
@@ -2166,11 +2359,12 @@ function updateFlow(dt) {
     game.time -= dt;
     if (game.time <= 0) {
       game.time = 0; audio.whistle(3); audio.roar(0.8);
-      if (game.half === 1) { game.state = 'half'; game.stateT = 3.5; banner('HALF TIME', `HOUNDS ${game.score[0]} · ${game.score[1]} WARDENS`); }
+      if (game.half === 1) { game.state = 'half'; game.stateT = 3.5; banner('HALF TIME', `${TEAMS[0].short} ${game.score[0]} · ${game.score[1]} ${TEAMS[1].short}`); }
       else {
         game.state = 'full';
-        const [a, b] = game.score, res = a > b ? 'HOUNDS WIN' : a < b ? 'WARDENS WIN' : 'DRAW';
-        banner(res, `${a} · ${b} · PRESS ENTER FOR A REMATCH`);
+        const [a, b] = game.score, res = a > b ? `${TEAMS[0].short} WIN` : a < b ? `${TEAMS[1].short} WIN` : 'DRAW';
+        banner(res, `${a} · ${b} · ${league.on ? 'TAP OR ENTER FOR THE MATCH REPORT' : 'PRESS ENTER FOR A REMATCH'}`);
+        if (league.on) finishLeagueMatch();
       }
     }
   } else if (game.state === 'goal') {
@@ -2180,6 +2374,7 @@ function updateFlow(dt) {
   }
 }
 function step(dt) {
+  game.clock += dt;
   updateFlow(dt);
   const active = game.state === 'play';
   predictLanding();
@@ -2330,9 +2525,9 @@ requestAnimationFrame(frame);
 function setDiff(k) {
   diffKey = k; DIFF = DIFFS[k];
   try { localStorage.setItem('ironball.diff', k); } catch (e) { /* storage unavailable */ }
-  document.querySelectorAll('.dbtn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === k)));
+  document.querySelectorAll('.diff .dbtn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === k)));
 }
-document.querySelectorAll('.dbtn').forEach(b => b.addEventListener('click', () => setDiff(b.dataset.diff)));
+document.querySelectorAll('.diff .dbtn').forEach(b => b.addEventListener('click', () => setDiff(b.dataset.diff)));
 setDiff(diffKey);
 const PAUSABLE = ['kickoff', 'play', 'goal', 'half'];
 function setPaused(on) {
@@ -2357,7 +2552,11 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space') input.pressA = true;
   if (THROW_KEYS.includes(e.code)) input.throwHeld = true;
   if (e.code === 'Enter' && sheetOpen) kickOff();
-  else if (e.code === 'Enter' && (game.state === 'menu' || game.state === 'full')) showSheet();
+  else if (e.code === 'Enter' && League.ui.isOpen()) League.ui.onEnter();
+  else if (e.code === 'Enter' && game.state === 'full' && league.on) showReport();
+  else if (e.code === 'Enter' && game.state === 'full') showSheet();
+  else if (e.code === 'Enter' && game.state === 'menu' && !hud.menu.hidden) openLeague();
+  else if (e.code === 'KeyQ' && game.state === 'menu' && !hud.menu.hidden) showSheet();
   if (e.code === 'KeyG') toggleGore();
   if ((game.state === 'menu' || game.state === 'full') && !sheetOpen) { if (e.code === 'Digit1') setDiff('easy'); if (e.code === 'Digit2') setDiff('normal'); if (e.code === 'Digit3') setDiff('hard'); }
   if (e.code === 'KeyM') audio.toggle();
@@ -2368,9 +2567,13 @@ window.addEventListener('keyup', e => {
   if (THROW_KEYS.includes(e.code) && !THROW_KEYS.some(k => keys.has(k))) { input.throwHeld = false; input.throwReleased = true; }
 });
 window.addEventListener('blur', () => { keys.clear(); input.throwHeld = false; setPaused(true); });
-$('startBtn').addEventListener('click', () => showSheet());
+$('startBtn').addEventListener('click', () => { league.on = false; showSheet(); });
+$('leagueBtn').addEventListener('click', openLeague);
+$('wipeBtn').addEventListener('click', wipeCareer);
+League.ui.bind({ play: leagueSheet, menu: backToMenu });
+menuCareer();
 $('kickBtn').addEventListener('click', () => kickOff());
-renderer.domElement.addEventListener('pointerdown', () => { if (game.state === 'full' && !sheetOpen) showSheet(); });
+renderer.domElement.addEventListener('pointerdown', () => { if (game.state === 'full' && !sheetOpen && !League.ui.isOpen()) { if (league.on) showReport(); else showSheet(); } });
 
 // touch controls
 {
@@ -2395,7 +2598,7 @@ renderer.domElement.addEventListener('pointerdown', () => { if (game.state === '
 }
 
 // expose a tiny hook for automated tests
-window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused, knockDown, kill, showSheet, kickOff, rollSquads };
+window.__ironball = { game, players, ball, human, audio, startMatch, step, setPaused, knockDown, kill, showSheet, kickOff, rollSquads, league, openLeague, leagueSheet, showReport, backToMenu, League };
 })();
 </script>
 </body>
