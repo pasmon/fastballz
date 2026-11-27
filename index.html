@@ -305,7 +305,7 @@ try { const v = localStorage.getItem('ironball.diff'); if (v && DIFFS[v]) diffKe
 let DIFF = DIFFS[diffKey];
 const game = { paused: false, state: 'menu', stateT: 0, half: 1, time: MATCH_HALF, score: [0, 0], gore: true, shake: 0, hitstop: 0, clock: 0 };
 // League mode (v0.4): the career, this fixture, both benches and what happened to whom
-const league = { on: false, c: null, fx: null, bench: [[], []], stats: {}, played: new Set(), deaths: [], limbs: [], report: null };
+const league = { on: false, c: null, fx: null, bench: [[], []], stats: {}, played: new Set(), deaths: [], kos: [], limbs: [], report: null };
 
 // ===================================================================
 // Renderer, scene, camera
@@ -907,7 +907,7 @@ class Player {
     if (!w) return;
     this.name = w.name; Object.assign(this.base, w.base); this.size = w.size; this.mass = w.size ** 3;
     league.played.add(w.id);
-    if (!league.stats[w.id]) league.stats[w.id] = { g: 0, k: 0, toy: 0 };
+    if (!league.stats[w.id]) league.stats[w.id] = { g: 0, k: 0, ko: 0, toy: 0 };
   }
 }
 
@@ -1429,6 +1429,18 @@ function killBody(v, dx, dz, dmg, byTeam) {
   const scorer = byTeam === v.team || byTeam < 0 ? 1 - v.team : byTeam;
   if (game.state === 'play') game.score[scorer] += 10;
   const lh = v.lastHit, killer = lh.by && lh.by.team !== v.team && game.clock - lh.t < 6 ? lh.by : null;
+  // League: most lethal hits only knock a player out cold. They are carried off and live to play again.
+  // Bigger hits kill more often, and your own Hounds survive more on the easier settings.
+  const lethal = !v.who || league.report || Math.random() < clamp(0.3 + (dmg > 38 ? 0.25 : 0), 0, 1) * (v.team === 0 ? { easy: 0.6, normal: 0.8, hard: 1 }[diffKey] : 1);
+  if (!lethal) {
+    league.kos.push({ id: v.who.id, team: v.team });
+    if (killer && killer.who && league.stats[killer.who.id]) league.stats[killer.who.id].ko++;
+    audio.crunch(1); audio.roar(0.8); audio.vox(v, 'ko');
+    game.shake = 1.1; game.hitstop = 0.1;
+    if (game.gore) { emitBlood(v.pos.x, 1.1, v.pos.z, dx, dz, 120, 6, 3); addDecal(v.pos.x + dx, v.pos.z + dz, rand(0.4, 0.7)); }
+    feed(`${v.name} OUT COLD · CARRIED OFF · +10 ${TEAMS[scorer].short}`, TEAMS[scorer].cls);
+    return;
+  }
   const death = v.who && !league.report ? { id: v.who.id, team: v.team, killer: killer ? killer.name : null, killerTeam: killer ? killer.team : 1 - v.team, how: game.clock - lh.t < 6 ? lh.how : '', style: 'dead' } : null;
   if (death) league.deaths.push(death);
   if (death && killer && killer.who && league.stats[killer.who.id]) league.stats[killer.who.id].k++;
@@ -2278,7 +2290,7 @@ function backToMenu() {
 function leagueSheet(c) {
   const fx = League.fixture(c); if (!fx) return;
   league.on = true; league.c = c; league.fx = fx;
-  league.stats = {}; league.played = new Set(); league.deaths = []; league.limbs = []; league.report = null;
+  league.stats = {}; league.played = new Set(); league.deaths = []; league.kos = []; league.limbs = []; league.report = null;
   setTeamLook(1, League.TEAM_DEFS[fx.opp]);
   const sq = [League.squadFor(c, 0), League.squadFor(c, fx.opp)];
   for (const p of players) { p.setPerson(sq[p.team].starters[p.idx]); p.reset(true); if (p.gone) { p.state = 'dead'; p.stateT = 99; p.sink = 2.5; } }
@@ -2297,7 +2309,7 @@ function finishLeagueMatch() {
   for (const p of players) if (p.who && p.state !== 'dead') league.played.add(p.who.id);
   league.report = League.finishMatch(league.c, {
     fixture: league.fx, score: game.score.slice(), stats: league.stats, played: [...league.played],
-    deaths: league.deaths, limbs: league.limbs,
+    deaths: league.deaths, kos: league.kos, limbs: league.limbs,
   });
 }
 function showReport() {

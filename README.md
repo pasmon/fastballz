@@ -76,6 +76,7 @@ LEAGUE on the start screen starts a career, or continues the one saved in your b
 
 - **Six teams, five rounds.** Your Crimson Hounds play the Cobalt Wardens (balanced), Rust Jackals (small, fast, accurate), Ashen Mauls (huge, slow, hit like trucks), Venom Saints (vicious, love ground and pound) and Bone Smelters (tough and dirty, the champions) once each. Win 3, draw 1. The other fixtures are simulated, kills and all, and reported in the news.
 - **Squads persist.** You own up to eight players: five start, the rest wait on the bench. Names, stats, weight, experience and wounds carry over.
+- **Most hits only knock a player out.** In a league match, a lethal hit usually leaves the player out cold and carried off: they still score 10 for the other team, and the player is back next match. About a third of lethal hits kill (more for the biggest hits, fewer for your Hounds on Easy and Normal).
 - **The dead stay dead.** A player killed in a match is gone for good. The best fit from the bench comes on; with nobody left on the bench, the team plays a man down. A torn-off arm or leg stays lost.
 - **Experience.** Goals, kills, bumper and star hits, surviving and winning all earn experience. Each level gives a point to spend on any stat (up to 10) on the SQUAD screen.
 - **Squad top-ups.** Until the transfer market arrives, the league sends you one weak conscript per round while you have fewer than eight players, and as many as it takes to field five. Rival teams sign free agents up to eight.

@@ -233,8 +233,10 @@ function simGame(c, g, news) {
       news.push({ cls: 'dead', text: obit(d) });
     }
   };
-  killSome(kh, A.s.slice(), g.away, g.home, H.s);
-  killSome(ka, H.s.slice(), g.home, g.away, A.s);
+  // as in a real league match, most lethal hits only knock a player out cold
+  const dies = n => { let d = 0; for (let i = 0; i < n; i++) if (Math.random() < 0.35) d++; return d; };
+  killSome(dies(kh), A.s.slice(), g.away, g.home, H.s);
+  killSome(dies(ka), H.s.slice(), g.home, g.away, A.s);
   // a few limbs come off too
   for (const [s, id] of [[H.s, g.home], [A.s, g.away]]) {
     const live = s.filter(p => c.teams[id].roster.includes(p));
@@ -281,18 +283,23 @@ function finishMatch(c, res) {
   for (const id of res.played) {
     for (const t of [c.teams[0], c.teams[opp]]) {
       const p = byId(t, id); if (!p) continue;
-      const st = res.stats[id] || { g: 0, k: 0, toy: 0 };
+      const st = res.stats[id] || { g: 0, k: 0, ko: 0, toy: 0 };
       const won = (t.id === 0 && us > them) || (t.id !== 0 && them > us);
-      const gain = 2 + (deadIds.has(id) ? 0 : 2) + 4 * st.g + 4 * st.k + st.toy + (won ? 2 : 0);
+      const gain = 2 + (deadIds.has(id) ? 0 : 2) + 4 * st.g + 4 * st.k + 2 * (st.ko || 0) + st.toy + (won ? 2 : 0);
       p.mp++; p.g += st.g; p.k += st.k;
       lvBefore.set(id, p.lvl);
       gainXp(p, gain, t.id === 0 ? rep.levelUps : null);
-      if (t.id === 0) rep.players.push({ name: p.name, pos: p.pos, xp: gain, g: st.g, k: st.k, toy: st.toy, dead: deadIds.has(id), lvl: p.lvl, up: p.lvl > lvBefore.get(id) });
+      if (t.id === 0) rep.players.push({ name: p.name, pos: p.pos, xp: gain, g: st.g, k: st.k, ko: st.ko || 0, toy: st.toy, dead: deadIds.has(id), lvl: p.lvl, up: p.lvl > lvBefore.get(id) });
     }
   }
   for (const w of res.limbs) {
     const p = byId(c.teams[w.team === 0 ? 0 : opp], w.id);
     if (p && !deadIds.has(w.id)) rep.wounds.push({ team: w.team === 0 ? 0 : opp, text: `${cap(p.name)} (${TEAM_DEFS[w.team === 0 ? 0 : opp].short}) loses the ${{ armL: 'left arm', armR: 'right arm', legL: 'left leg', legR: 'right leg' }[w.key]}.` });
+  }
+  rep.kos = [];
+  for (const k of res.kos || []) {
+    const tid = k.team === 0 ? 0 : opp, p = byId(c.teams[tid], k.id);
+    if (p && !deadIds.has(k.id)) rep.kos.push({ team: tid, text: `${cap(p.name)} (${TEAM_DEFS[tid].short}) was carried off out cold. Back next match.` });
   }
   const news = [{ cls: 'hd', text: `ROUND ${c.round + 1}` }];
   news.push({ cls: 'res', text: `${TEAM_DEFS[f.home].short} ${sh} · ${sa} ${TEAM_DEFS[f.away].short}` });
@@ -470,11 +477,13 @@ function showReport(c, rep) {
     if (d.team === 0) p.appendChild(el('small', null, ` Level ${d.lvl}, ${d.mp} matches, ${d.k} kills. Gone for good.`));
     return p;
   }));
+  sec('CARRIED OFF', (rep.kos || []).map(k => el('p', k.team === 0 ? 'wound mine' : 'wound', k.text)));
   sec('WOUNDS', rep.wounds.map(w => el('p', w.team === 0 ? 'wound mine' : 'wound', w.text)));
   const rows = rep.players.map(p => {
     const bits = [];
     if (p.g) bits.push(`${p.g} goal${p.g > 1 ? 's' : ''}`);
     if (p.k) bits.push(`${p.k} kill${p.k > 1 ? 's' : ''}`);
+    if (p.ko) bits.push(`${p.ko} knockout${p.ko > 1 ? 's' : ''}`);
     if (p.toy) bits.push(`${p.toy} toy hit${p.toy > 1 ? 's' : ''}`);
     const r = el('p', p.dead ? 'dead mine' : 'res');
     r.appendChild(el('b', null, p.name.toUpperCase()));
