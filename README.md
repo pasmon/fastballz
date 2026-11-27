@@ -4,7 +4,7 @@ A brutal future-sport for the browser, built with Three.js. Two armoured teams o
 
 ## Play
 
-Open `index.html` in a modern browser (Chrome, Firefox, Edge, Safari). There is no build step, and Three.js r160 is bundled in `vendor/`, so it also works offline. Only the title fonts come from the web, with system fallbacks.
+Open `index.html` in a modern browser (Chrome, Firefox, Edge, Safari). There is no build step, and Three.js r160 is bundled in `vendor/`, so it also works offline. Keep `league.js` and the `vendor/` folder next to `index.html`. Only the title fonts come from the web, with system fallbacks.
 
 You can also serve the folder, for example `npx serve .` or `python3 -m http.server`, and open the printed address.
 
@@ -20,7 +20,8 @@ You can also serve the folder, for example `npx serve .` or `python3 -m http.ser
 | P or Esc | Pause (the game also pauses when you leave the tab) |
 | G | Gore on or off |
 | M | Sound on or off |
-| Enter | Start match / rematch, then kick off from the team sheet |
+| Enter | League from the start screen, then play / continue / kick off through its screens. Rematch after a quick match |
+| Q | Quick match from the start screen |
 
 Phones and tablets get an on-screen stick and two buttons.
 
@@ -69,6 +70,19 @@ Every player has an old-school Finnish first name (Jorma, Erkki, Väinö and 53 
 - Stamina: running flat out and diving drain it, easing off refills it, half time tops it up. Below about a third, a player runs and dives slower and goes down harder and for longer. It shows as the yellow bar under each health bar.
 - Difficulty now lowers the Wardens' stats (most of all their speed) as well as dimming their AI.
 
+## The league (v0.4)
+
+LEAGUE on the start screen starts a career, or continues the one saved in your browser. QUICK MATCH is the old one-off game with fresh random line-ups.
+
+- **Six teams, five rounds.** Your Crimson Hounds play the Cobalt Wardens (balanced), Rust Jackals (small, fast, accurate), Ashen Mauls (huge, slow, hit like trucks), Venom Saints (vicious, love ground and pound) and Bone Smelters (tough and dirty, the champions) once each. Win 3, draw 1. The other fixtures are simulated, kills and all, and reported in the news.
+- **Squads persist.** You own up to eight players: five start, the rest wait on the bench. Names, stats, weight, experience and wounds carry over.
+- **The dead stay dead.** A player killed in a match is gone for good. The best fit from the bench comes on; with nobody left on the bench, the team plays a man down. A torn-off arm or leg stays lost.
+- **Experience.** Goals, kills, bumper and star hits, surviving and winning all earn experience. Each level gives a point to spend on any stat (up to 10) on the SQUAD screen.
+- **Squad top-ups.** Until the transfer market arrives, the league sends you one weak conscript per round while you have fewer than eight players, and as many as it takes to field five. Rival teams sign free agents up to eight.
+- **Between matches**: a match report (with obituaries), then the hub: TABLE (standings, next fixture, news), SQUAD (tap two players to swap them between the line-up and the bench, spend level-up points) and THE FALLEN (every death of the career).
+- The career saves to your browser after every match. NEW CAREER under the start buttons wipes it (tap twice).
+- Difficulty still weakens whoever you play against.
+
 ## Roadmap
 
-Next: the league and management loop (v0.4).
+Next: v0.4 part 2, credits, the transfer market, the chrome shop for lost limbs, and a house rule for each team's arena.
